@@ -43,6 +43,11 @@ build/
 captures/
 results/
 
+# Mode 1's bundled-game volume (docker-compose.yml SQUAD_DATA default). Holds
+# the whole Squad dedicated install after a first boot — tens of GB, never a
+# tree `git status` should ever show as untracked.
+/squad-data/
+
 # Offline capzone fetch cache (raw SquadCalc responses + 404 list).
 # The committed artefact is data/static/capzones.json, not this cache.
 scripts/.capzone_cache/

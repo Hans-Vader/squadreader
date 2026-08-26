@@ -90,7 +90,7 @@ services:
     build: { context: ., dockerfile: docker/Dockerfile }
     image: sqreader:local
     restart: unless-stopped
-    pid: "${SQUAD_PID_MODE:-service:squad}"
+    pid: "${SQUAD_PID_MODE:?no .env found — run: cp .env.example .env, then pick a mode in it}"
     cap_drop: ["ALL"]
     cap_add: ["SYS_PTRACE", "DAC_READ_SEARCH"]
     security_opt: ["apparmor=${SQUAD_APPARMOR:-docker-default}"]
@@ -114,17 +114,33 @@ Modes, each one contiguous block in `.env.example`:
 | 2 · drop-in (existing Squad container) | *(empty)* | `container:<name>` | `docker-default` |
 | 3 · host (LinuxGSM, bare metal) | *(empty)* | `host` | `unconfined` |
 
-Mode 1 is the default, so a fresh clone runs with `docker compose up -d` and no
-`.env` at all.
+`.env` is **required**; step one of every path is `cp .env.example .env`. An
+earlier draft of this design claimed mode 1 could be the zero-config default,
+and that was wrong: `SQUAD_PID_MODE` can be defaulted in the compose file but
+`COMPOSE_PROFILES` cannot, so a defaulted `service:squad` would reference a
+service the inactive profile never creates. `SQUAD_PID_MODE` is therefore
+declared with Compose's required-variable form, which turns the fresh-clone
+case into an instruction instead of a puzzle:
+
+```
+error while interpolating services.sqreader.pid: required variable
+SQUAD_PID_MODE is missing a value: no .env found — run: cp .env.example .env,
+then pick a mode in it
+```
 
 `apparmor=docker-default` is passed explicitly rather than omitted, so the list
 element is never empty and the value is a plain interpolation. Verified
 accepted by the daemon.
 
-An inconsistent pair — `SQUAD_PID_MODE=service:squad` with the profile inactive
-— fails at project-load time, before any container starts, with
-`service "sqreader" depends on undefined service "squad": invalid compose
-project`. That is a good enough guard; no extra validation is written.
+Both failure modes are caught at project-load time, before any container
+starts: a missing `.env` by the required-variable message above, and an
+inconsistent pair — `SQUAD_PID_MODE=service:squad` with the profile inactive —
+by `service "sqreader" depends on undefined service "squad": invalid compose
+project`. Those are good enough guards; no extra validation is written.
+
+Mode 1 was verified to actually run, not merely to resolve: with
+`network_mode: host` on the game service and `pid: service:squad` on the
+reader, the reader's `/proc/1/cmdline` is the game service's process.
 
 `cap_add` and `cap_drop` are identical in all three modes. Only `pid` and
 `security_opt` vary, and both are single interpolated strings — which is what
@@ -168,7 +184,8 @@ set -eu
 # `serve` creates these itself (cli.py:642, stats.py:592), but the pruner runs
 # first and `cmd_retention` returns 1 on a missing directory — so on a fresh
 # volume the very first log line would be a spurious "recordings dir not found".
-mkdir -p /data/recordings /data/stats
+DATA_DIR="${SQREADER_DATA_DIR:-/data}"
+mkdir -p "$DATA_DIR/recordings" "$DATA_DIR/stats"
 
 # An operator typo here would otherwise make `-gt` fail under `set -e` and kill
 # the container at boot with nothing but a shell error to go on.
@@ -184,7 +201,7 @@ if [ "$RETENTION_INTERVAL" -gt 0 ]; then
   (
     while :; do
       sqreader retention \
-        --recordings-dir /data/recordings \
+        --recordings-dir "$DATA_DIR/recordings" \
         --max-age-days   "${RETENTION_MAX_AGE_DAYS:-90}" \
         --max-total-gb   "${RETENTION_MAX_TOTAL_GB:-150}" \
         --min-free-gb    "${RETENTION_MIN_FREE_GB:-50}" \
@@ -206,8 +223,8 @@ exec sqreader serve \
   --host 0.0.0.0 --port 8080 \
   --hz "${SQREADER_HZ:-0.5}" \
   --server-id "${SERVER_ID:-squad}" \
-  --recordings-dir /data/recordings \
-  --stats-db /data/stats/player_stats.db \
+  --recordings-dir "$DATA_DIR/recordings" \
+  --stats-db "$DATA_DIR/stats/player_stats.db" \
   --icons-dir /app/icons \
   --sqmaps-dir /app/sqmaps \
   --frontend-dir /app/frontend/dist \
@@ -248,6 +265,7 @@ Design points:
 | `SERVER_ID` | `squad` | snapshot label and stats-DB partition key |
 | `SQREADER_CONFIG` | *(unset)* | path to a mounted `sqreader.config.json` |
 | `SQREADER_LOG_LEVEL` | `INFO` | honoured by `cmd_serve`'s `logging.basicConfig` |
+| `SQREADER_DATA_DIR` | `/data` | container-internal root for `recordings/` and `stats/`; exists so the entrypoint is runnable under a test harness that cannot write `/data` |
 
 The retention defaults reproduce `deploy/sqreader-retention.service` exactly.
 Each of the three policies is truthiness-guarded in `cmd_retention`

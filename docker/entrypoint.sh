@@ -6,9 +6,11 @@
 # valve belongs next to the thing that opens it.
 set -eu
 
-# SQREADER_DATA_DIR exists so this file is runnable outside a container (the
+# SQREADER_STATE_DIR exists so this file is runnable outside a container (the
 # test harness cannot write /data). In the image it is always the default.
-DATA_DIR="${SQREADER_DATA_DIR:-/data}"
+# (Not SQREADER_DATA_DIR — metadata.py already owns that name for the
+# static-metadata directory; see the export near the bottom of this file.)
+DATA_DIR="${SQREADER_STATE_DIR:-/data}"
 
 # `serve` creates these itself (cli.py:642, stats.py:592), but the pruner runs
 # first and `cmd_retention` returns 1 on a missing directory — so on a fresh
@@ -38,7 +40,7 @@ if [ "$RETENTION_INTERVAL" -gt 0 ]; then
         --max-total-gb   "${RETENTION_MAX_TOTAL_GB:-150}" \
         --min-free-gb    "${RETENTION_MIN_FREE_GB:-50}" \
         --min-keep       "${RETENTION_MIN_KEEP:-3}" || true
-      sleep "$RETENTION_INTERVAL"
+      sleep "$RETENTION_INTERVAL" || true
     done
   ) &
 fi
@@ -46,9 +48,29 @@ fi
 # Optional two-tier recording, assembled positionally rather than with
 # `${RECORD_HZ:+--record-hz "$RECORD_HZ"}` — that expansion's quoting behaviour
 # is subtle enough to be a liability in a file nobody reads twice.
+#
+# NOTE: this `set --` replaces the script's own positional params, so a
+# `docker compose run sqreader <cmd>` argument passed here is swallowed, not
+# forwarded. Use `docker compose run --entrypoint sh sqreader` instead.
 set --
 if [ -n "${RECORD_HZ:-}" ]; then
   set -- --record-hz "$RECORD_HZ"
+fi
+
+# The package is pip-installed, so metadata.py's source-relative guess lands
+# in site-packages, where data/static does not exist — every map, capture
+# zone and vehicle-faction table would load empty, silently. COPY put the
+# real one at /app/data/static; point the reader at it.
+export SQREADER_DATA_DIR=/app/data/static
+
+# SQREADER_SQUAD_LOG override exists for the same reason SQREADER_STATE_DIR
+# does above: the test harness cannot write into the real /squad. In the
+# image this is always the default.
+SQUAD_LOG="${SQREADER_SQUAD_LOG:-/squad/SquadGame/Saved/Logs/SquadGame.log}"
+if [ ! -r "$SQUAD_LOG" ]; then
+  echo "entrypoint: WARNING: $SQUAD_LOG is not readable — the kill feed will be" \
+       "INCOMPLETE. SQUAD_DATA must be the install root that CONTAINS SquadGame/." \
+       "(Expected on a first mode-1 boot while SteamCMD is still downloading.)" >&2
 fi
 
 # `exec`, so the reader is PID 1 and gets Docker's SIGTERM directly: it installs
@@ -58,6 +80,10 @@ fi
 # No --pid on purpose. _open_pipeline_or_wait (cli.py:174) re-resolves the game
 # on every retry and stays alive when it is absent, so the first boot simply
 # waits out SteamCMD's download and a game restart needs no wrapper.
+#
+# --squad-log is always passed (rather than left for find_squad_log(pid) to
+# derive) because that derivation reads the GAME's mount namespace, which is
+# wrong here; see the readability check above for the warning this forgoes.
 exec sqreader serve \
   --host 0.0.0.0 --port 8080 \
   --hz "${SQREADER_HZ:-0.5}" \
@@ -67,5 +93,5 @@ exec sqreader serve \
   --icons-dir /app/icons \
   --sqmaps-dir /app/sqmaps \
   --frontend-dir /app/frontend/dist \
-  --squad-log /squad/SquadGame/Saved/Logs/SquadGame.log \
+  --squad-log "$SQUAD_LOG" \
   "$@"

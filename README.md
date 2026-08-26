@@ -68,6 +68,121 @@ sudo sqreader serve
 On a standard single-instance box **no configuration is needed** — the Squad
 server is auto-detected by its process name.
 
+## Run in Docker
+
+The reader can run in its own container beside a containerised Squad server,
+reading the game's memory across the container boundary. It needs two
+capabilities and a shared PID namespace — nothing else, and no changes to the
+game's image.
+
+```bash
+cp .env.example .env      # then uncomment ONE mode block in it
+docker compose up -d
+```
+
+`.env` is required: Compose can default the PID mode but not the profile that
+creates the game service, so the mode is stated rather than guessed. Running
+without it prints exactly which file to copy.
+
+### Three modes
+
+| Your setup | `SQUAD_PID_MODE` | `COMPOSE_PROFILES` | `SQUAD_APPARMOR` |
+|---|---|---|---|
+| No Squad server yet — run one here | `service:squad` | `bundled-squad` | `docker-default` |
+| A Squad container you already run | `container:<name>` | *(empty)* | `docker-default` |
+| Squad native on the host (LinuxGSM) | `host` | *(empty)* | `unconfined` |
+
+Host mode needs `apparmor=unconfined` because Docker's `docker-default` profile
+permits ptrace only toward peers under the same profile; an unconfined host
+process is refused at `/proc/<pid>/maps`, before the reader reaches any memory.
+
+### Why the reader is privileged
+
+`cap_drop: [ALL]` plus exactly two capabilities:
+
+- `SYS_PTRACE` — `/proc/<pid>/maps` is mode 0444 but gated by the ptrace check;
+- `DAC_READ_SEARCH` — `/proc/<pid>/mem` is mode 0600 and owned by the game's
+  user, so the DAC check applies on top.
+
+Both are needed. Docker's default capability set appears to work with only
+`SYS_PTRACE`, but only because it still carries `DAC_OVERRIDE`. The reader is
+still read-only: it never opens the game's memory for writing.
+
+Installing the reader *into* the Squad image does not avoid this. It would be a
+sibling of the game process rather than an ancestor, and `ptrace_scope=1` grants
+attach to ancestors only — the same capability, plus a forked image and two
+lifecycles behind one PID 1.
+
+### What is mounted
+
+| Mount | Why |
+|---|---|
+| `${SQUAD_DATA}:/squad:ro` | the kill-feed log, and nothing else |
+| `sqreader-data:/data` | recordings and `stats/player_stats.db` |
+
+In mode 1 the game writes to `${SQUAD_DATA}` too, and the upstream image runs as
+an unprivileged user, so create it writable first:
+
+```bash
+mkdir -p squad-data && chmod 777 squad-data
+```
+
+The replay UI is published to `127.0.0.1:8080` by default. Put it behind the
+nginx config in [`deploy/`](deploy/) rather than setting `SQREADER_BIND=0.0.0.0`
+on a public box.
+
+### Recording retention
+
+Recordings grow by hundreds of MB a day and nothing else deletes them; on a box
+that also runs the game, a full disk takes Squad down too. The container runs a
+logrotate-style pruner beside the reader, with the same policy as the systemd
+timer in `deploy/`:
+
+| Variable | Default | |
+|---|---|---|
+| `RETENTION_INTERVAL` | `86400` | seconds between passes; `0` disables the pruner |
+| `RETENTION_MAX_AGE_DAYS` | `90` | `0` disables this policy |
+| `RETENTION_MAX_TOTAL_GB` | `150` | `0` disables this policy |
+| `RETENTION_MIN_FREE_GB` | `50` | `0` disables this policy |
+| `RETENTION_MIN_KEEP` | `3` | newest N are never pruned |
+
+The match being recorded right now is never touched.
+
+### Troubleshooting
+
+**`no .env found — run: cp .env.example .env`** — exactly that.
+
+**`service "sqreader" depends on undefined service "squad"`** — `SQUAD_PID_MODE`
+is `service:squad` but `COMPOSE_PROFILES` does not contain `bundled-squad`.
+Uncomment a whole mode block, not one line of it.
+
+**`PermissionError` on `/proc/<pid>/mem`** — in host mode, set
+`SQUAD_APPARMOR=unconfined`. Otherwise check that `cap_add` still lists both
+`SYS_PTRACE` and `DAC_READ_SEARCH`.
+
+**`WARNING: no Squad log found — the kill feed will be INCOMPLETE`** — the
+`/squad` mount is wrong. `SQUAD_DATA` must be the install root, the directory
+that *contains* `SquadGame/`. This degrades quietly: the reader keeps running
+and the stats look plausible while undercounting kills.
+
+**`[degraded] cannot read the game`** on first boot — normal. The reader
+re-resolves the game on every retry, so it simply waits out SteamCMD's initial
+download.
+
+### Plugins and optional config
+
+Plugins (anti-cheat) and the alert webhook are driven by a
+`sqreader.config.json`. Create one from `sqreader.config.example.json` and
+uncomment the matching volume line in `docker-compose.yml` — the reader's
+working directory is `/app`, so a file mounted at `/app/sqreader.config.json`
+is found without setting anything else.
+
+### Not included
+
+The image is built from source, so remote self-update is inert — upgrade by
+pulling the repo and running `docker compose build`. Central push stays off;
+it needs `sqreader enroll` and the `push` extra (`pip install .[push]`).
+
 ## Configuration
 
 Copy `sqreader.config.example.json` to `sqreader.config.json` (gitignored) and

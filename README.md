@@ -76,7 +76,8 @@ capabilities and a shared PID namespace — nothing else, and no changes to the
 game's image.
 
 ```bash
-cp .env.example .env      # then uncomment ONE mode block in it
+cp .env.example .env               # then uncomment ONE mode block in it
+mkdir -p squad-data && chown 1000:1000 squad-data   # mode 1 only — see below
 docker compose up -d
 ```
 
@@ -95,6 +96,27 @@ without it prints exactly which file to copy.
 Host mode needs `apparmor=unconfined` because Docker's `docker-default` profile
 permits ptrace only toward peers under the same profile; an unconfined host
 process is refused at `/proc/<pid>/maps`, before the reader reaches any memory.
+
+**In modes 1 and 2 the reader does not survive a game CONTAINER restart.** It
+joins the game container's PID namespace as a member, not as that namespace's
+init. `stop_grace_period: 30s` and the exec-to-PID-1 design protect a
+`docker stop`/SIGTERM of the *reader itself*, and a game PROCESS restart
+inside an unchanged container is fine — `_open_pipeline_or_wait` just
+re-resolves it. But if the game container restarts (it runs
+`restart: unless-stopped`), the kernel SIGKILLs every remaining member of that
+PID namespace when its init exits, the reader included, with no chance to run
+`finalize_recording` — an in-flight recording is left without its
+`.meta.json` sidecar. Only mode 3 is exempt, since there the reader shares the
+*host's* PID namespace instead.
+
+**Mode 3's authority is broader than "read-only" suggests.** `pid: host` +
+`apparmor=unconfined` + `SYS_PTRACE` + running as uid 0 (not user-namespaced)
+lets the container ptrace *any* host process, not just the game — that is read
+access to all host process memory and, via `PTRACE_ATTACH`, a container-escape
+primitive. "The reader is still read-only" (below) describes what the reader's
+own code does, not the authority the container holds. Choose mode 3 only on a
+host you already trust at root level; modes 1 and 2 stay bounded to the peer
+container, since `docker-default`'s ptrace confinement still applies there.
 
 ### Why the reader is privileged
 
@@ -121,10 +143,12 @@ lifecycles behind one PID 1.
 | `sqreader-data:/data` | recordings and `stats/player_stats.db` |
 
 In mode 1 the game writes to `${SQUAD_DATA}` too, and the upstream image runs as
-an unprivileged user, so create it writable first:
+an unprivileged user (uid 1000), so create it writable by that user first —
+otherwise Docker creates it root-owned on first `up -d` and upstream's SteamCMD
+fails:
 
 ```bash
-mkdir -p squad-data && chmod 777 squad-data
+mkdir -p squad-data && chown 1000:1000 squad-data
 ```
 
 The replay UI is published to `127.0.0.1:8080` by default. Put it behind the
@@ -156,18 +180,24 @@ The match being recorded right now is never touched.
 is `service:squad` but `COMPOSE_PROFILES` does not contain `bundled-squad`.
 Uncomment a whole mode block, not one line of it.
 
-**`PermissionError` on `/proc/<pid>/mem`** — in host mode, set
-`SQUAD_APPARMOR=unconfined`. Otherwise check that `cap_add` still lists both
-`SYS_PTRACE` and `DAC_READ_SEARCH`.
+**`PermissionError` on `/proc/<pid>/maps`** — in host mode, set
+`SQUAD_APPARMOR=unconfined`; without it, AppArmor refuses the ptrace check
+before `/proc/<pid>/mem` is ever opened. Otherwise check that `cap_add` still
+lists both `SYS_PTRACE` and `DAC_READ_SEARCH`.
 
-**`WARNING: no Squad log found — the kill feed will be INCOMPLETE`** — the
-`/squad` mount is wrong. `SQUAD_DATA` must be the install root, the directory
-that *contains* `SquadGame/`. This degrades quietly: the reader keeps running
-and the stats look plausible while undercounting kills.
+**`entrypoint: WARNING: /squad/SquadGame/Saved/Logs/SquadGame.log is not
+readable`** — the `/squad` mount is wrong. `SQUAD_DATA` must be the install
+root, the directory that *contains* `SquadGame/`. Expected on a first mode-1
+boot while SteamCMD is still downloading; otherwise this degrades quietly —
+the reader keeps running and the stats look plausible while undercounting
+kills.
 
-**`[degraded] cannot read the game`** on first boot — normal. The reader
-re-resolves the game on every retry, so it simply waits out SteamCMD's initial
-download.
+**`[degraded] cannot read the game (...)`** — the reader re-resolves the game
+on every retry, so a first boot simply waits out SteamCMD's initial download.
+Whether that is normal is in the parenthesised reason: `(no SquadGameServer
+process running)` is expected until the game starts; a `PermissionError` in
+that parenthesis is a capability/AppArmor misconfiguration, not a boot delay
+— see the entry above.
 
 ### Plugins and optional config
 
@@ -180,7 +210,8 @@ is found without setting anything else.
 ### Not included
 
 The image is built from source, so remote self-update is inert — upgrade by
-pulling the repo and running `docker compose build`. Central push stays off;
+pulling the repo and running `docker compose build && docker compose up -d`
+(`build` alone leaves the old container running). Central push stays off;
 it needs `sqreader enroll` and the `push` extra (`pip install .[push]`).
 
 ## Configuration

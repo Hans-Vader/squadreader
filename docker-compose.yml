@@ -1,0 +1,85 @@
+# sqreader beside a Squad dedicated server.
+#
+# WHICH Squad server it reads is chosen entirely in .env — see .env.example and
+# start with `cp .env.example .env`. Only `pid` and `security_opt` differ
+# between the three modes; the capability set is identical, because the kernel
+# gates are the same in all of them.
+
+services:
+  # Only created when COMPOSE_PROFILES=bundled-squad. Operators who already run
+  # a Squad server leave the profile off and point SQUAD_PID_MODE at theirs.
+  squad:
+    image: ${SQUAD_IMAGE:-cm2network/squad}
+    profiles: ["bundled-squad"]
+    restart: unless-stopped
+    network_mode: host          # upstream's recommendation for this image
+    volumes:
+      - ${SQUAD_DATA:-./squad-data}:/home/steam/squad-dedicated
+    environment:
+      PORT: ${PORT:-7787}
+      QUERYPORT: ${QUERYPORT:-27165}
+      BEACONPORT: ${BEACONPORT:-15000}
+      RCONPORT: ${RCONPORT:-21114}
+      FIXEDMAXPLAYERS: ${FIXEDMAXPLAYERS:-80}
+      FIXEDMAXTICKRATE: ${FIXEDMAXTICKRATE:-50}
+      SERVER_NAME: ${SERVER_NAME:-Squad Dedicated Server}
+
+  sqreader:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: sqreader:local
+    restart: unless-stopped
+
+    # Required, not defaulted. SQUAD_PID_MODE could carry a default but
+    # COMPOSE_PROFILES cannot, so a defaulted `service:squad` would point at a
+    # service the inactive profile never creates. Better a sentence than a
+    # dangling reference.
+    pid: "${SQUAD_PID_MODE:?no .env found — run: cp .env.example .env, then pick a mode in it}"
+
+    # SYS_PTRACE clears the ptrace gate on /proc/<pid>/maps (0444).
+    # DAC_READ_SEARCH clears the DAC gate on /proc/<pid>/mem (0600, owned by the
+    # game's user). BOTH are required; Docker's default set only ever hid the
+    # second one behind DAC_OVERRIDE.
+    cap_drop: ["ALL"]
+    cap_add: ["SYS_PTRACE", "DAC_READ_SEARCH"]
+
+    # docker-default's `ptrace peer=docker-default` covers a peer container but
+    # not an unconfined host process, so host mode needs `unconfined` here and
+    # the other two modes do not.
+    security_opt: ["apparmor=${SQUAD_APPARMOR:-docker-default}"]
+
+    # serve installs a SIGTERM handler and writes the .sqrx footer on the way
+    # out; the 10s default risks a SIGKILL mid-footer.
+    stop_grace_period: 30s
+
+    ports:
+      # Host side is loopback by default, matching deploy/nginx_reverse-proxy.example.conf.
+      # Set SQREADER_BIND=0.0.0.0 to expose it deliberately.
+      - "${SQREADER_BIND:-127.0.0.1}:${SQREADER_PORT:-8080}:8080"
+
+    volumes:
+      # Read-only, and only for the kill-feed log. Nothing else is read from here.
+      - ${SQUAD_DATA:-./squad-data}:/squad:ro
+      - sqreader-data:/data
+      # Optional: plugins, alert webhook, central URL. Uncomment to use one —
+      # config.py picks it up from the working directory with no env var needed.
+      # - ./sqreader.config.json:/app/sqreader.config.json:ro
+
+    environment:
+      SERVER_ID: ${SERVER_ID:-squad}
+      SQREADER_HZ: ${SQREADER_HZ:-0.5}
+      RECORD_HZ: ${RECORD_HZ:-}
+      SQREADER_LOG_LEVEL: ${SQREADER_LOG_LEVEL:-INFO}
+      # Only needed for a config file mounted somewhere OTHER than /app: WORKDIR
+      # is /app and config.py falls back to `Path.cwd() / sqreader.config.json`,
+      # so the mount below is self-sufficient on its own.
+      SQREADER_CONFIG: ${SQREADER_CONFIG:-}
+      RETENTION_INTERVAL: ${RETENTION_INTERVAL:-86400}
+      RETENTION_MAX_AGE_DAYS: ${RETENTION_MAX_AGE_DAYS:-90}
+      RETENTION_MAX_TOTAL_GB: ${RETENTION_MAX_TOTAL_GB:-150}
+      RETENTION_MIN_FREE_GB: ${RETENTION_MIN_FREE_GB:-50}
+      RETENTION_MIN_KEEP: ${RETENTION_MIN_KEEP:-3}
+
+volumes:
+  sqreader-data:

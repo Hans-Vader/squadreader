@@ -2,6 +2,8 @@
 .ssh_config.json
 .env
 .env.*
+# ...but the mode-selection template MUST be committed; .env.* above would eat it.
+!.env.example
 *.pem
 # Per-machine runtime config (copy sqreader.config.example.json). Machine paths.
 sqreader.config.json

@@ -1,17 +1,26 @@
 """What the container actually runs.
 
 The reader itself is unchanged by the Docker work; this file is the whole of
-the new logic. It pins three things that are quiet when they break: that the
+the new logic. It pins the things that are quiet when they break: that the
 reader is started WITHOUT --pid (so it re-resolves the game on every retry
 instead of freezing a stale one), that the retention pruner can be switched
-off and configured rather than being a hardcoded policy, and that an operator
-typo in an interval produces a sentence instead of a shell error.
+off and configured rather than being a hardcoded policy, that an operator
+typo in an interval produces a sentence instead of a shell error, that
+metadata.py's static-data directory is exported before exec (a pip install
+leaves data/static out of site-packages, and a miss there loads every map/
+capzone/vehicle-faction table empty with nothing in the log to explain it),
+and that a missing kill-feed log warns instead of retrying forever in silence.
 
-The stubs deserve a word. `sleep` is stubbed to exit non-zero so `set -e` ends
-the pruner's `while` loop after one pass — otherwise the loop would run
-forever and the assertions would race it. Output goes to a FILE, never a pipe:
-the pruner is a background subshell holding the parent's stdout, and a pipe
-would not close until it exits.
+The stubs deserve a word. `sleep` used to be stubbed to exit non-zero so
+`set -e` ended the pruner's `while` loop after one pass — but the entrypoint
+now has `|| true` on that same call (minor 5: a failing real `sleep` must not
+kill the pruner for the container's lifetime), which neutralises that trick.
+So the stub logs its call and then really blocks (`exec`s the real `sleep`
+binary) instead, long enough to outlast any single test but short enough to
+self-reap — the loop's second iteration simply never starts within the test's
+lifetime. Output goes to a FILE, never a pipe: the pruner is a background
+subshell holding the parent's stdout, and a pipe would not close until it
+exits.
 
 Nothing here asserts an ordering between the `retention` and `serve` calls.
 The pruner is backgrounded and `serve` is `exec`ed, so which one reaches the
@@ -23,6 +32,8 @@ import json
 import os
 import shutil
 import subprocess
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -32,18 +43,36 @@ ENTRYPOINT = REPO / "docker" / "entrypoint.sh"
 
 _SQREADER_STUB = """#!/bin/sh
 printf 'sqreader %s\\n' "$*" >> "$STUB_LOG"
+printf 'env SQREADER_DATA_DIR=%s\\n' "${SQREADER_DATA_DIR:-unset}" >> "$STUB_LOG"
 """
 
-# Exits 1 on purpose: under `set -e` that ends the pruner's `while` loop after
-# a single pass, so the test never races an endless background job.
-_SLEEP_STUB = """#!/bin/sh
+# The real `sleep`, resolved against the unmodified PATH before run_entrypoint
+# ever prepends a stub bindir in front of it — `exec`ing it below is how the
+# stub blocks the pruner's `while` loop on its second iteration without
+# needing the loop's own `sleep` call to fail (see the module docstring).
+_REAL_SLEEP = shutil.which("sleep") or "/bin/sleep"
+
+_SLEEP_STUB = f"""#!/bin/sh
 printf 'sleep %s\\n' "$*" >> "$STUB_LOG"
-exit 1
+exec {_REAL_SLEEP} 10
 """
 
+# How long to wait for the pruner's backgrounded subshell to catch up with the
+# `sh` process subprocess.run() already returned from — see EntrypointRun.
+_PRUNER_DEADLINE_SEC = 5.0
 
-def run_entrypoint(tmp_path: Path, **env: str) -> list[str]:
-    """Run the entrypoint with stubbed `sqreader`/`sleep`; return logged calls."""
+
+@dataclass
+class EntrypointRun:
+    """What one `run_entrypoint()` call produced."""
+
+    calls: list[str]
+    returncode: int
+    output: str
+
+
+def run_entrypoint(tmp_path: Path, **env: str) -> EntrypointRun:
+    """Run the entrypoint with stubbed `sqreader`/`sleep`; return what happened."""
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     for name, body in (("sqreader", _SQREADER_STUB), ("sleep", _SLEEP_STUB)):
@@ -60,7 +89,7 @@ def run_entrypoint(tmp_path: Path, **env: str) -> list[str]:
     environ.update({
         "PATH": f"{bindir}:{environ['PATH']}",
         "STUB_LOG": str(log),
-        "SQREADER_DATA_DIR": str(tmp_path / "data"),
+        "SQREADER_STATE_DIR": str(tmp_path / "data"),
     })
     environ.update(env)
 
@@ -68,9 +97,27 @@ def run_entrypoint(tmp_path: Path, **env: str) -> list[str]:
     with stdout.open("w", encoding="utf-8") as fh:
         proc = subprocess.run(["sh", str(ENTRYPOINT)], env=environ,
                               stdout=fh, stderr=subprocess.STDOUT, timeout=30)
-    run_entrypoint.last_returncode = proc.returncode
-    run_entrypoint.last_output = stdout.read_text(encoding="utf-8")
-    return log.read_text(encoding="utf-8").splitlines()
+
+    # subprocess.run() only waits on the direct `sh` child, which `exec`s into
+    # the serve stub and returns immediately — the pruner's backgrounded
+    # subshell can still be forking `retention` and `sleep` after that. Under
+    # load the final reviewer measured the `retention` line missing in 44/150
+    # runs without this wait. Skip it when nothing will ever background (the
+    # script errored out before reaching the pruner, or pruning is off).
+    interval = environ.get("RETENTION_INTERVAL", "86400")
+    if proc.returncode == 0 and interval != "0":
+        deadline = time.monotonic() + _PRUNER_DEADLINE_SEC
+        while time.monotonic() < deadline:
+            if any(line.startswith("sleep ")
+                   for line in log.read_text(encoding="utf-8").splitlines()):
+                break
+            time.sleep(0.05)
+
+    return EntrypointRun(
+        calls=log.read_text(encoding="utf-8").splitlines(),
+        returncode=proc.returncode,
+        output=stdout.read_text(encoding="utf-8"),
+    )
 
 
 def serve_call(calls: list[str]) -> str:
@@ -89,46 +136,88 @@ def test_the_reader_is_started_without_a_pid(tmp_path):
     """--pid would freeze whichever process existed at boot. Leaving it off is
     what lets _open_pipeline_or_wait sit through SteamCMD's first download and
     survive a game restart, so this is the assertion that matters most."""
-    call = serve_call(run_entrypoint(tmp_path))
+    call = serve_call(run_entrypoint(tmp_path).calls)
     assert "--pid" not in call
 
 
 def test_the_reader_binds_all_interfaces_inside_the_container(tmp_path):
     """It has to: a published port cannot reach a 127.0.0.1 bind. The host-side
     narrowing is the compose file's job, not this one's."""
-    call = serve_call(run_entrypoint(tmp_path))
+    call = serve_call(run_entrypoint(tmp_path).calls)
     assert "--host 0.0.0.0 --port 8080" in call
 
 
 def test_the_reader_is_pointed_at_the_mounted_log_and_assets(tmp_path):
-    call = serve_call(run_entrypoint(tmp_path))
+    call = serve_call(run_entrypoint(tmp_path).calls)
     assert "--squad-log /squad/SquadGame/Saved/Logs/SquadGame.log" in call
     assert "--icons-dir /app/icons" in call
     assert "--sqmaps-dir /app/sqmaps" in call
     assert "--frontend-dir /app/frontend/dist" in call
 
 
+def test_the_entrypoint_exports_the_static_metadata_dir_before_exec(tmp_path):
+    """metadata.py already owns SQREADER_DATA_DIR for the directory it loads
+    map bounds, capzones and vehicle factions from. A pip install leaves
+    data/static out of site-packages, so `_default_data_dir()` falls through
+    to a site-packages path that does not exist and every one of those tables
+    loads empty — silently. This survived three task reviews; it deserves a
+    test. Retention is off so the one sqreader invocation is unambiguously
+    `serve`, the process that actually reads this variable."""
+    calls = run_entrypoint(tmp_path, RETENTION_INTERVAL="0").calls
+    assert "env SQREADER_DATA_DIR=/app/data/static" in calls
+
+
 def test_the_tick_rate_follows_the_production_unit_not_argparse(tmp_path):
     """deploy/sqreader-prod.service runs 0.5 Hz; argparse defaults to 3.0."""
-    assert "--hz 0.5" in serve_call(run_entrypoint(tmp_path))
-    assert "--hz 2" in serve_call(run_entrypoint(tmp_path, SQREADER_HZ="2"))
+    assert "--hz 0.5" in serve_call(run_entrypoint(tmp_path).calls)
+    assert "--hz 2" in serve_call(run_entrypoint(tmp_path, SQREADER_HZ="2").calls)
 
 
 def test_two_tier_recording_is_off_unless_asked_for(tmp_path):
-    assert "--record-hz" not in serve_call(run_entrypoint(tmp_path))
-    assert "--record-hz 4" in serve_call(run_entrypoint(tmp_path, RECORD_HZ="4"))
+    assert "--record-hz" not in serve_call(run_entrypoint(tmp_path).calls)
+    assert "--record-hz 4" in serve_call(run_entrypoint(tmp_path, RECORD_HZ="4").calls)
 
 
 def test_the_server_id_is_settable(tmp_path):
-    assert "--server-id squad" in serve_call(run_entrypoint(tmp_path))
-    assert "--server-id eu-1" in serve_call(run_entrypoint(tmp_path, SERVER_ID="eu-1"))
+    assert "--server-id squad" in serve_call(run_entrypoint(tmp_path).calls)
+    assert "--server-id eu-1" in serve_call(run_entrypoint(tmp_path, SERVER_ID="eu-1").calls)
+
+
+# --- the squad-log readability warning (I2) ---------------------------------
+#
+# find_squad_log(pid) is never used — cmd_serve prefers the explicit
+# --squad-log the entrypoint always passes, and that derivation would read the
+# GAME's mount namespace anyway, which is wrong here. So the entrypoint has to
+# warn for itself when the mount is missing/wrong, or the warning cli.py:581
+# would otherwise print is simply unreachable inside the container.
+
+_WARNING_TEXT = "is not readable"
+
+
+def test_a_readable_squad_log_gets_no_warning(tmp_path):
+    log = tmp_path / "SquadGame.log"
+    log.write_text("", encoding="utf-8")
+    result = run_entrypoint(tmp_path, SQREADER_SQUAD_LOG=str(log))
+    assert _WARNING_TEXT not in result.output
+
+
+def test_a_missing_squad_log_warns_instead_of_failing_silently(tmp_path):
+    """LogTailer.start() succeeds regardless — the open() happens in its own
+    thread — so cmd_serve prints the reassuring 'kill-feed from log -> …' and
+    then retries forever with nothing in the log. The entrypoint has to say
+    so up front."""
+    missing = tmp_path / "does-not-exist" / "SquadGame.log"
+    result = run_entrypoint(tmp_path, SQREADER_SQUAD_LOG=str(missing))
+    assert _WARNING_TEXT in result.output
+    assert str(missing) in result.output
+    assert result.returncode == 0          # a warning, not a failure
 
 
 # --- the pruner ------------------------------------------------------------
 
 def test_the_pruner_runs_once_with_the_units_policy(tmp_path):
     """Defaults are deploy/sqreader-retention.service, verbatim."""
-    calls = retention_calls(run_entrypoint(tmp_path))
+    calls = retention_calls(run_entrypoint(tmp_path).calls)
     assert len(calls) == 1
     assert "--max-age-days 90" in calls[0]
     assert "--max-total-gb 150" in calls[0]
@@ -137,7 +226,7 @@ def test_the_pruner_runs_once_with_the_units_policy(tmp_path):
 
 
 def test_the_pruner_can_be_switched_off_entirely(tmp_path):
-    calls = run_entrypoint(tmp_path, RETENTION_INTERVAL="0")
+    calls = run_entrypoint(tmp_path, RETENTION_INTERVAL="0").calls
     assert retention_calls(calls) == []
     assert serve_call(calls)          # the reader still starts
 
@@ -147,14 +236,14 @@ def test_each_policy_can_be_disabled_on_its_own(tmp_path):
     switch — the loop can be neutered without being removed."""
     calls = retention_calls(run_entrypoint(
         tmp_path, RETENTION_MAX_AGE_DAYS="0", RETENTION_MAX_TOTAL_GB="0",
-        RETENTION_MIN_FREE_GB="0"))
+        RETENTION_MIN_FREE_GB="0").calls)
     assert "--max-age-days 0" in calls[0]
     assert "--max-total-gb 0" in calls[0]
     assert "--min-free-gb 0" in calls[0]
 
 
 def test_the_pruner_sleeps_for_the_configured_interval(tmp_path):
-    calls = run_entrypoint(tmp_path, RETENTION_INTERVAL="900")
+    calls = run_entrypoint(tmp_path, RETENTION_INTERVAL="900").calls
     assert "sleep 900" in calls
 
 
@@ -170,10 +259,10 @@ def test_the_data_directories_exist_before_the_pruner_looks(tmp_path):
 def test_a_mistyped_interval_is_a_sentence_not_a_shell_error(tmp_path):
     """`[ -gt ]` on a non-number fails under `set -eu` and kills the container
     at boot with nothing an operator can act on."""
-    run_entrypoint(tmp_path, RETENTION_INTERVAL="abends")
-    assert run_entrypoint.last_returncode == 1
-    assert "RETENTION_INTERVAL" in run_entrypoint.last_output
-    assert "abends" in run_entrypoint.last_output
+    result = run_entrypoint(tmp_path, RETENTION_INTERVAL="abends")
+    assert result.returncode == 1
+    assert "RETENTION_INTERVAL" in result.output
+    assert "abends" in result.output
 
 
 # --- shell hygiene ---------------------------------------------------------
@@ -253,6 +342,17 @@ def test_every_mode_grants_both_capabilities_and_no_others(tmp_path, mode):
     svc = compose_config(tmp_path, mode)["services"]["sqreader"]
     assert svc["cap_drop"] == ["ALL"]
     assert sorted(svc["cap_add"]) == ["DAC_READ_SEARCH", "SYS_PTRACE"]
+
+
+@needs_docker
+@pytest.mark.parametrize("mode", list(MODES))
+def test_every_mode_mounts_squad_read_only_with_a_graceful_stop(tmp_path, mode):
+    """The reader never writes to /squad, and needs room to write the .sqrx
+    footer on SIGTERM instead of being SIGKILLed mid-write (cli.py:1285ff)."""
+    svc = compose_config(tmp_path, mode)["services"]["sqreader"]
+    squad_mount = next(v for v in svc["volumes"] if v["target"] == "/squad")
+    assert squad_mount["read_only"] is True
+    assert svc["stop_grace_period"] == "30s"
 
 
 @needs_docker

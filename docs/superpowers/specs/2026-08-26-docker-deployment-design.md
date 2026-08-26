@@ -265,7 +265,8 @@ Design points:
 | `SERVER_ID` | `squad` | snapshot label and stats-DB partition key |
 | `SQREADER_CONFIG` | *(unset)* | path to a mounted `sqreader.config.json` |
 | `SQREADER_LOG_LEVEL` | `INFO` | honoured by `cmd_serve`'s `logging.basicConfig` |
-| `SQREADER_DATA_DIR` | `/data` | container-internal root for `recordings/` and `stats/`; exists so the entrypoint is runnable under a test harness that cannot write `/data` |
+| `SQREADER_STATE_DIR` | `/data` | container-internal root for `recordings/` and `stats/`; exists so the entrypoint is runnable under a test harness that cannot write `/data` |
+| `SQREADER_DATA_DIR` | *(exported by entrypoint, not settable)* | forced to `/app/data/static` before `exec`; `metadata.py` already owns this name for the static-metadata directory it loads at startup, and a pip install leaves `data/static` out of site-packages, so without this every map/capzone/vehicle-faction table would silently load empty |
 
 The retention defaults reproduce `deploy/sqreader-retention.service` exactly.
 Each of the three policies is truthiness-guarded in `cmd_retention`

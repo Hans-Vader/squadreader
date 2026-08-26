@@ -1,0 +1,31 @@
+.git
+.github
+.idea
+.claude
+docs
+deploy
+packaging
+scripts
+tests
+
+# The prebuilt SPA is committed and is the only part of frontend/ the image
+# serves; the sources and node_modules are build-time only.
+frontend
+!frontend/dist
+
+# Runtime output — never bake a previous run's data into an image.
+recordings
+stats
+*.sqrx
+*.log
+sqreader.config.json
+.env
+
+__pycache__
+*.pyc
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info

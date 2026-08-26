@@ -823,15 +823,25 @@ cat > /tmp/sqr-mode1.env <<'EOF'
 COMPOSE_PROFILES=bundled-squad
 SQUAD_PID_MODE=service:squad
 SQUAD_APPARMOR=docker-default
-SQUAD_IMAGE=debian:bookworm-slim
+SQUAD_IMAGE=nginx:alpine
 SQUAD_DATA=/tmp/sqr-stub-data
 EOF
 mkdir -p /tmp/sqr-stub-data
-docker compose --env-file /tmp/sqr-mode1.env up -d squad
+# `up -d` with no service name, NOT `up -d squad`: naming a service starts that
+# service and its dependencies, not its dependents, so `up -d squad` would leave
+# the reader down and the next command with nothing to exec into.
+docker compose --env-file /tmp/sqr-mode1.env up -d
 docker compose --env-file /tmp/sqr-mode1.env exec -T sqreader \
   sh -c 'cat /proc/1/cmdline | tr "\0" " "; echo'
 docker compose --env-file /tmp/sqr-mode1.env down -t 5
 ```
+
+The stub image must stay up on its own. `debian:bookworm-slim` will not do: its
+default command is a shell, which exits immediately with no TTY, so the PID
+namespace the reader is supposed to join dies before it can join it.
+`nginx:alpine` runs a real foreground daemon and needs no `command:` override —
+which matters, because the compose file deliberately does not set one for the
+game service.
 
 Expected: the reader's PID 1 is the `squad` service's process, not its own.
 Note the stub `squad` image has no Squad in it, so the reader will log

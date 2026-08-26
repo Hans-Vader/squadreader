@@ -21,6 +21,11 @@ stats
 sqreader.config.json
 .env
 
+# Mode 1's bundled-game volume, INSIDE the build context by default
+# (SQUAD_DATA=./squad-data). After a first boot this holds the whole Squad
+# dedicated install (tens of GB) — never stream that to the build daemon.
+squad-data
+
 __pycache__
 *.pyc
 .venv

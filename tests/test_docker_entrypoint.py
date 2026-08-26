@@ -16,11 +16,21 @@ The stubs deserve a word. `sleep` used to be stubbed to exit non-zero so
 now has `|| true` on that same call (minor 5: a failing real `sleep` must not
 kill the pruner for the container's lifetime), which neutralises that trick.
 So the stub logs its call and then really blocks (`exec`s the real `sleep`
-binary) instead, long enough to outlast any single test but short enough to
-self-reap — the loop's second iteration simply never starts within the test's
-lifetime. Output goes to a FILE, never a pipe: the pruner is a background
-subshell holding the parent's stdout, and a pipe would not close until it
-exits.
+binary) instead, which holds the loop at one pass for the test's lifetime.
+
+That blocking is a pause, NOT an exit, so nothing ends the loop on its own —
+and nothing waits on it either: the pruner is `( while :; do ...; done ) &`
+inside a script that then `exec`s away, so the subshell reparents to init and
+runs forever. An earlier version of this file relied on it "self-reaping" and
+leaked one permanently-running `sh entrypoint.sh` per pruner-enabled run; 641
+had piled up on one developer machine before anyone noticed. The leash is a
+process group: the entrypoint is started with `start_new_session=True`, and
+`_reap_group` SIGKILLs that whole group — and waits for it to actually die —
+before `run_entrypoint` returns. pytest is never in that group, so it cannot
+kill itself.
+
+Output goes to a FILE, never a pipe: the pruner is a background subshell
+holding the parent's stdout, and a pipe would not close until it exits.
 
 Nothing here asserts an ordering between the `retention` and `serve` calls.
 The pruner is backgrounded and `serve` is `exec`ed, so which one reaches the
@@ -28,9 +38,11 @@ log first is genuinely undefined — a dry run showed `serve` winning.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -58,8 +70,32 @@ exec {_REAL_SLEEP} 10
 """
 
 # How long to wait for the pruner's backgrounded subshell to catch up with the
-# `sh` process subprocess.run() already returned from — see EntrypointRun.
+# `sh` process we already reaped — see EntrypointRun.
 _PRUNER_DEADLINE_SEC = 5.0
+
+# How long to wait for the killed process group to actually disappear.
+_REAP_DEADLINE_SEC = 5.0
+
+
+def _reap_group(pgid: int) -> None:
+    """SIGKILL the entrypoint's process group and wait for it to really go.
+
+    Without this the pruner outlives the test forever (see the module
+    docstring). Waiting rather than fire-and-forgetting is what makes
+    `test_the_pruner_does_not_outlive_its_test` deterministic — SIGKILL is
+    asynchronous, and a zombie still counts as a group member until init
+    reaps it.
+    """
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pgid, signal.SIGKILL)
+    deadline = time.monotonic() + _REAP_DEADLINE_SEC
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"entrypoint process group {pgid} survived SIGKILL")
 
 
 @dataclass
@@ -69,6 +105,7 @@ class EntrypointRun:
     calls: list[str]
     returncode: int
     output: str
+    pgid: int
 
 
 def run_entrypoint(tmp_path: Path, **env: str) -> EntrypointRun:
@@ -94,9 +131,20 @@ def run_entrypoint(tmp_path: Path, **env: str) -> EntrypointRun:
     environ.update(env)
 
     # A FILE, not a pipe — see the module docstring.
+    #
+    # start_new_session puts the script and everything it forks into a fresh
+    # process group whose id is the child's pid, so the backgrounded pruner can
+    # be killed as a unit afterwards. pytest stays in its own group.
     with stdout.open("w", encoding="utf-8") as fh:
-        proc = subprocess.run(["sh", str(ENTRYPOINT)], env=environ,
-                              stdout=fh, stderr=subprocess.STDOUT, timeout=30)
+        proc = subprocess.Popen(["sh", str(ENTRYPOINT)], env=environ,
+                                stdout=fh, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+        pgid = proc.pid
+        try:
+            returncode = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            _reap_group(pgid)
+            raise
 
     # subprocess.run() only waits on the direct `sh` child, which `exec`s into
     # the serve stub and returns immediately — the pruner's backgrounded
@@ -105,18 +153,23 @@ def run_entrypoint(tmp_path: Path, **env: str) -> EntrypointRun:
     # runs without this wait. Skip it when nothing will ever background (the
     # script errored out before reaching the pruner, or pruning is off).
     interval = environ.get("RETENTION_INTERVAL", "86400")
-    if proc.returncode == 0 and interval != "0":
-        deadline = time.monotonic() + _PRUNER_DEADLINE_SEC
-        while time.monotonic() < deadline:
-            if any(line.startswith("sleep ")
-                   for line in log.read_text(encoding="utf-8").splitlines()):
-                break
-            time.sleep(0.05)
+    try:
+        if returncode == 0 and interval != "0":
+            deadline = time.monotonic() + _PRUNER_DEADLINE_SEC
+            while time.monotonic() < deadline:
+                if any(line.startswith("sleep ")
+                       for line in log.read_text(encoding="utf-8").splitlines()):
+                    break
+                time.sleep(0.05)
+    finally:
+        # In a finally: a failed poll must still not leave the pruner running.
+        _reap_group(pgid)
 
     return EntrypointRun(
         calls=log.read_text(encoding="utf-8").splitlines(),
-        returncode=proc.returncode,
+        returncode=returncode,
         output=stdout.read_text(encoding="utf-8"),
+        pgid=pgid,
     )
 
 
@@ -254,6 +307,22 @@ def test_the_data_directories_exist_before_the_pruner_looks(tmp_path):
     run_entrypoint(tmp_path)
     assert (tmp_path / "data" / "recordings").is_dir()
     assert (tmp_path / "data" / "stats").is_dir()
+
+
+def test_the_pruner_does_not_outlive_its_test(tmp_path):
+    """The regression that made this file leak processes onto the host.
+
+    The pruner is a backgrounded `while :` loop and the script `exec`s away
+    from it, so nothing on earth ends it: it reparents to init and runs until
+    the machine does. That went unnoticed through four task reviews and a fix
+    wave — 641 orphaned `sh entrypoint.sh` processes had accumulated before a
+    reviewer counted them. Asserting the process group is gone is the only
+    check that would have failed.
+    """
+    run = run_entrypoint(tmp_path)
+    assert retention_calls(run.calls), "pruner never ran — this proves nothing"
+    with pytest.raises(ProcessLookupError):
+        os.killpg(run.pgid, 0)
 
 
 def test_a_mistyped_interval_is_a_sentence_not_a_shell_error(tmp_path):

@@ -19,6 +19,7 @@ log first is genuinely undefined — a dry run showed `serve` winning.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -181,3 +182,105 @@ def test_a_mistyped_interval_is_a_sentence_not_a_shell_error(tmp_path):
 def test_the_entrypoint_is_portable_posix_shell(tmp_path):
     """The image has no bash guarantee, and the shebang says /bin/sh."""
     assert subprocess.run(["dash", "-n", str(ENTRYPOINT)]).returncode == 0
+
+
+# --- the compose modes -----------------------------------------------------
+#
+# Both mode 1 and mode 3 broke while this was being designed — mode 1 because a
+# defaulted `pid: service:squad` referenced a service the inactive profile never
+# created, mode 3 because AppArmor refuses a peer it does not confine. Those are
+# the regressions worth pinning.
+#
+# `json` is imported at the TOP of this file, with the others — ruff selects the
+# full `E` set, so a mid-file import here would trip E402.
+
+COMPOSE = REPO / "docker-compose.yml"
+
+MODES = {
+    "bundled": "COMPOSE_PROFILES=bundled-squad\nSQUAD_PID_MODE=service:squad\nSQUAD_APPARMOR=docker-default\n",
+    "attach":  "COMPOSE_PROFILES=\nSQUAD_PID_MODE=container:my-squad\nSQUAD_APPARMOR=docker-default\n",
+    "host":    "COMPOSE_PROFILES=\nSQUAD_PID_MODE=host\nSQUAD_APPARMOR=unconfined\n",
+}
+
+needs_docker = pytest.mark.skipif(
+    shutil.which("docker") is None, reason="docker not installed")
+
+
+def compose_config(tmp_path: Path, mode: str) -> dict:
+    env_file = tmp_path / f"{mode}.env"
+    env_file.write_text(MODES[mode], encoding="utf-8")
+    proc = subprocess.run(
+        ["docker", "compose", "--env-file", str(env_file),
+         "-f", str(COMPOSE), "config", "--format", "json"],
+        capture_output=True, text=True, timeout=120, cwd=REPO)
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout)
+
+
+@needs_docker
+def test_the_bundled_mode_brings_the_game_service_with_it(tmp_path):
+    cfg = compose_config(tmp_path, "bundled")
+    assert sorted(cfg["services"]) == ["sqreader", "squad"]
+    assert cfg["services"]["sqreader"]["pid"] == "service:squad"
+
+
+@needs_docker
+@pytest.mark.parametrize("mode,pid", [
+    ("attach", "container:my-squad"),
+    ("host", "host"),
+])
+def test_the_other_modes_leave_the_game_service_out(tmp_path, mode, pid):
+    """Starting a second Squad server for someone who already has one would be
+    a very expensive surprise."""
+    cfg = compose_config(tmp_path, mode)
+    assert list(cfg["services"]) == ["sqreader"]
+    assert cfg["services"]["sqreader"]["pid"] == pid
+
+
+@needs_docker
+def test_host_mode_is_the_only_one_that_unconfines_apparmor(tmp_path):
+    for mode, want in (("bundled", "apparmor=docker-default"),
+                       ("attach", "apparmor=docker-default"),
+                       ("host", "apparmor=unconfined")):
+        opts = compose_config(tmp_path, mode)["services"]["sqreader"]["security_opt"]
+        assert opts == [want], f"{mode}: {opts}"
+
+
+@needs_docker
+@pytest.mark.parametrize("mode", list(MODES))
+def test_every_mode_grants_both_capabilities_and_no_others(tmp_path, mode):
+    """SYS_PTRACE alone opens /proc/<pid>/maps but not /proc/<pid>/mem."""
+    svc = compose_config(tmp_path, mode)["services"]["sqreader"]
+    assert svc["cap_drop"] == ["ALL"]
+    assert sorted(svc["cap_add"]) == ["DAC_READ_SEARCH", "SYS_PTRACE"]
+
+
+@needs_docker
+def test_the_replay_ui_is_not_published_to_the_world_by_default(tmp_path):
+    port = compose_config(tmp_path, "bundled")["services"]["sqreader"]["ports"][0]
+    assert port["host_ip"] == "127.0.0.1"
+
+
+@needs_docker
+def test_a_missing_env_file_names_the_fix(tmp_path):
+    """The fresh-clone case. Compose cannot default COMPOSE_PROFILES, so the
+    mode has to be stated rather than guessed — say so instead of dangling."""
+    empty = tmp_path / "empty.env"
+    empty.write_text("", encoding="utf-8")
+    proc = subprocess.run(
+        ["docker", "compose", "--env-file", str(empty), "-f", str(COMPOSE), "config"],
+        capture_output=True, text=True, timeout=120, cwd=REPO)
+    assert proc.returncode != 0
+    assert "SQUAD_PID_MODE" in proc.stderr
+    assert "cp .env.example .env" in proc.stderr
+
+
+@needs_docker
+def test_a_mode_that_contradicts_its_profile_is_refused_before_anything_starts(tmp_path):
+    bad = tmp_path / "bad.env"
+    bad.write_text("COMPOSE_PROFILES=\nSQUAD_PID_MODE=service:squad\n", encoding="utf-8")
+    proc = subprocess.run(
+        ["docker", "compose", "--env-file", str(bad), "-f", str(COMPOSE), "config"],
+        capture_output=True, text=True, timeout=120, cwd=REPO)
+    assert proc.returncode != 0
+    assert "undefined service" in proc.stderr

@@ -187,8 +187,8 @@ def retention_calls(calls: list[str]) -> list[str]:
 
 def test_the_reader_is_started_without_a_pid(tmp_path):
     """--pid would freeze whichever process existed at boot. Leaving it off is
-    what lets _open_pipeline_or_wait sit through SteamCMD's first download and
-    survive a game restart, so this is the assertion that matters most."""
+    what lets _open_pipeline_or_wait sit through the game server's own startup or
+    update and survive a game restart, so this is the assertion that matters most."""
     call = serve_call(run_entrypoint(tmp_path).calls)
     assert "--pid" not in call
 
@@ -344,10 +344,11 @@ def test_the_entrypoint_is_portable_posix_shell(tmp_path):
 
 # --- the compose modes -----------------------------------------------------
 #
-# Both mode 1 and mode 3 broke while this was being designed — mode 1 because a
-# defaulted `pid: service:squad` referenced a service the inactive profile never
-# created, mode 3 because AppArmor refuses a peer it does not confine. Those are
-# the regressions worth pinning.
+# Host mode broke while this was being designed, because AppArmor refuses a peer
+# it does not confine. And the whole file defines the READER ONLY: the game
+# server is the operator's, running outside this repo, so `docker compose up`
+# must never bring a second one into existence. Those are the regressions worth
+# pinning.
 #
 # `json` is imported at the TOP of this file, with the others — ruff selects the
 # full `E` set, so a mid-file import here would trip E402.
@@ -355,9 +356,8 @@ def test_the_entrypoint_is_portable_posix_shell(tmp_path):
 COMPOSE = REPO / "docker-compose.yml"
 
 MODES = {
-    "bundled": "COMPOSE_PROFILES=bundled-squad\nSQUAD_PID_MODE=service:squad\nSQUAD_APPARMOR=docker-default\n",
-    "attach":  "COMPOSE_PROFILES=\nSQUAD_PID_MODE=container:my-squad\nSQUAD_APPARMOR=docker-default\n",
-    "host":    "COMPOSE_PROFILES=\nSQUAD_PID_MODE=host\nSQUAD_APPARMOR=unconfined\n",
+    "attach": "SQUAD_PID_MODE=container:my-squad\nSQUAD_APPARMOR=docker-default\nSQUAD_DATA=/srv/squad\n",
+    "host":   "SQUAD_PID_MODE=host\nSQUAD_APPARMOR=unconfined\nSQUAD_DATA=/srv/squad\n",
 }
 
 needs_docker = pytest.mark.skipif(
@@ -376,20 +376,14 @@ def compose_config(tmp_path: Path, mode: str) -> dict:
 
 
 @needs_docker
-def test_the_bundled_mode_brings_the_game_service_with_it(tmp_path):
-    cfg = compose_config(tmp_path, "bundled")
-    assert sorted(cfg["services"]) == ["sqreader", "squad"]
-    assert cfg["services"]["sqreader"]["pid"] == "service:squad"
-
-
-@needs_docker
 @pytest.mark.parametrize("mode,pid", [
     ("attach", "container:my-squad"),
     ("host", "host"),
 ])
-def test_the_other_modes_leave_the_game_service_out(tmp_path, mode, pid):
-    """Starting a second Squad server for someone who already has one would be
-    a very expensive surprise."""
+def test_no_mode_ever_defines_a_game_service(tmp_path, mode, pid):
+    """This stack reads a Squad server; it never runs one. Starting a second
+    game server for someone who already has one — colliding on 7787/27165/21114
+    and pulling ~27 GB through SteamCMD — would be a very expensive surprise."""
     cfg = compose_config(tmp_path, mode)
     assert list(cfg["services"]) == ["sqreader"]
     assert cfg["services"]["sqreader"]["pid"] == pid
@@ -397,8 +391,7 @@ def test_the_other_modes_leave_the_game_service_out(tmp_path, mode, pid):
 
 @needs_docker
 def test_host_mode_is_the_only_one_that_unconfines_apparmor(tmp_path):
-    for mode, want in (("bundled", "apparmor=docker-default"),
-                       ("attach", "apparmor=docker-default"),
+    for mode, want in (("attach", "apparmor=docker-default"),
                        ("host", "apparmor=unconfined")):
         opts = compose_config(tmp_path, mode)["services"]["sqreader"]["security_opt"]
         assert opts == [want], f"{mode}: {opts}"
@@ -426,14 +419,15 @@ def test_every_mode_mounts_squad_read_only_with_a_graceful_stop(tmp_path, mode):
 
 @needs_docker
 def test_the_replay_ui_is_not_published_to_the_world_by_default(tmp_path):
-    port = compose_config(tmp_path, "bundled")["services"]["sqreader"]["ports"][0]
+    port = compose_config(tmp_path, "attach")["services"]["sqreader"]["ports"][0]
     assert port["host_ip"] == "127.0.0.1"
 
 
 @needs_docker
-def test_a_missing_env_file_names_the_fix(tmp_path):
-    """The fresh-clone case. Compose cannot default COMPOSE_PROFILES, so the
-    mode has to be stated rather than guessed — say so instead of dangling."""
+def test_a_missing_env_file_names_both_things_it_cannot_guess(tmp_path):
+    """The fresh-clone case. Neither the game process nor its install directory
+    exists inside this stack, so neither can carry a default — say which is
+    missing instead of attaching to whatever happens to be there."""
     empty = tmp_path / "empty.env"
     empty.write_text("", encoding="utf-8")
     proc = subprocess.run(
@@ -441,15 +435,19 @@ def test_a_missing_env_file_names_the_fix(tmp_path):
         capture_output=True, text=True, timeout=120, cwd=REPO)
     assert proc.returncode != 0
     assert "SQUAD_PID_MODE" in proc.stderr
+    assert "SQUAD_DATA" in proc.stderr
     assert "cp .env.example .env" in proc.stderr
 
 
 @needs_docker
-def test_a_mode_that_contradicts_its_profile_is_refused_before_anything_starts(tmp_path):
+def test_a_mode_without_an_install_path_is_refused_before_anything_starts(tmp_path):
+    """Defaulting SQUAD_DATA would mount an empty directory: the reader would
+    start, look healthy, and undercount kills for the rest of the match."""
     bad = tmp_path / "bad.env"
-    bad.write_text("COMPOSE_PROFILES=\nSQUAD_PID_MODE=service:squad\n", encoding="utf-8")
+    bad.write_text("SQUAD_PID_MODE=host\n", encoding="utf-8")
     proc = subprocess.run(
         ["docker", "compose", "--env-file", str(bad), "-f", str(COMPOSE), "config"],
         capture_output=True, text=True, timeout=120, cwd=REPO)
     assert proc.returncode != 0
-    assert "undefined service" in proc.stderr
+    assert "SQUAD_DATA" in proc.stderr
+    assert "contains SquadGame/" in proc.stderr

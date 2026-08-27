@@ -43,9 +43,9 @@ build/
 captures/
 results/
 
-# Mode 1's bundled-game volume (docker-compose.yml SQUAD_DATA default). Holds
-# the whole Squad dedicated install after a first boot — tens of GB, never a
-# tree `git status` should ever show as untracked.
+# Defensive: nothing here creates this, but SQUAD_DATA points at a Squad
+# install (tens of GB) and an operator may well aim it at a path inside the
+# checkout. Never a tree `git status` should show as untracked.
 /squad-data/
 
 # Offline capzone fetch cache (raw SquadCalc responses + 404 list).

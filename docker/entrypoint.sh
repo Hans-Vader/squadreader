@@ -70,7 +70,7 @@ SQUAD_LOG="${SQREADER_SQUAD_LOG:-/squad/SquadGame/Saved/Logs/SquadGame.log}"
 if [ ! -r "$SQUAD_LOG" ]; then
   echo "entrypoint: WARNING: $SQUAD_LOG is not readable — the kill feed will be" \
        "INCOMPLETE. SQUAD_DATA must be the install root that CONTAINS SquadGame/." \
-       "(Expected on a first mode-1 boot while SteamCMD is still downloading.)" >&2
+       "(Expected while your server is still installing or updating.)" >&2
 fi
 
 # `exec`, so the reader is PID 1 and gets Docker's SIGTERM directly: it installs
@@ -78,8 +78,8 @@ fi
 # in-flight recording (cli.py:1285ff). Behind a shell it would be SIGKILLed.
 #
 # No --pid on purpose. _open_pipeline_or_wait (cli.py:174) re-resolves the game
-# on every retry and stays alive when it is absent, so the first boot simply
-# waits out SteamCMD's download and a game restart needs no wrapper.
+# on every retry and stays alive when it is absent, so the reader can be brought
+# up before the game server is, and a game restart needs no wrapper.
 #
 # --squad-log is always passed (rather than left for find_squad_log(pid) to
 # derive) because that derivation reads the GAME's mount namespace, which is

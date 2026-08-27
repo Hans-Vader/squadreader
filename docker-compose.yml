@@ -19,7 +19,7 @@ services:
     # a container this compose file does not create, or the host's own PID
     # namespace — so there is no default that could be right. Better a sentence
     # than an attach to whatever happens to be there.
-    pid: "${SQUAD_PID_MODE:?no .env found — run: cp .env.example .env, then pick a mode in it}"
+    pid: "${SQUAD_PID_MODE:?unset — cp .env.example .env, then uncomment ONE mode block in it}"
 
     # SYS_PTRACE clears the ptrace gate on /proc/<pid>/maps (0444).
     # DAC_READ_SEARCH clears the DAC gate on /proc/<pid>/mem (0600, owned by the

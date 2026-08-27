@@ -1,29 +1,13 @@
 # sqreader beside a Squad dedicated server.
 #
-# WHICH Squad server it reads is chosen entirely in .env — see .env.example and
-# start with `cp .env.example .env`. Only `pid` and `security_opt` differ
-# between the three modes; the capability set is identical, because the kernel
-# gates are the same in all of them.
+# This stack runs the READER ONLY. The game server is yours and lives outside
+# this repo — in a container you already run, or natively on the host. WHICH one
+# the reader attaches to is chosen entirely in .env; see .env.example and start
+# with `cp .env.example .env`. Only `pid` and `security_opt` differ between the
+# two modes; the capability set is identical, because the kernel gates are the
+# same in both.
 
 services:
-  # Only created when COMPOSE_PROFILES=bundled-squad. Operators who already run
-  # a Squad server leave the profile off and point SQUAD_PID_MODE at theirs.
-  squad:
-    image: ${SQUAD_IMAGE:-cm2network/squad}
-    profiles: ["bundled-squad"]
-    restart: unless-stopped
-    network_mode: host          # upstream's recommendation for this image
-    volumes:
-      - ${SQUAD_DATA:-./squad-data}:/home/steam/squad-dedicated
-    environment:
-      PORT: ${PORT:-7787}
-      QUERYPORT: ${QUERYPORT:-27165}
-      BEACONPORT: ${BEACONPORT:-15000}
-      RCONPORT: ${RCONPORT:-21114}
-      FIXEDMAXPLAYERS: ${FIXEDMAXPLAYERS:-100}
-      FIXEDMAXTICKRATE: ${FIXEDMAXTICKRATE:-64}
-      SERVER_NAME: ${SERVER_NAME:-Squad Dedicated Server}
-
   sqreader:
     build:
       context: .
@@ -31,10 +15,10 @@ services:
     image: sqreader:local
     restart: unless-stopped
 
-    # Required, not defaulted. SQUAD_PID_MODE could carry a default but
-    # COMPOSE_PROFILES cannot, so a defaulted `service:squad` would point at a
-    # service the inactive profile never creates. Better a sentence than a
-    # dangling reference.
+    # Required, not defaulted. Both values name something OUTSIDE this stack —
+    # a container this compose file does not create, or the host's own PID
+    # namespace — so there is no default that could be right. Better a sentence
+    # than an attach to whatever happens to be there.
     pid: "${SQUAD_PID_MODE:?no .env found — run: cp .env.example .env, then pick a mode in it}"
 
     # SYS_PTRACE clears the ptrace gate on /proc/<pid>/maps (0444).
@@ -60,7 +44,10 @@ services:
 
     volumes:
       # Read-only, and only for the kill-feed log. Nothing else is read from here.
-      - ${SQUAD_DATA:-./squad-data}:/squad:ro
+      # Required for the same reason as SQUAD_PID_MODE: nothing in this stack
+      # creates a Squad install, so a default path would mount an empty
+      # directory and silently cost you half the kills.
+      - ${SQUAD_DATA:?set SQUAD_DATA in .env to your Squad install root — the directory that contains SquadGame/}:/squad:ro
       - sqreader-data:/data
       # Optional: plugins, alert webhook, central URL. Uncomment to use one —
       # config.py picks it up from the working directory with no env var needed.

@@ -70,34 +70,37 @@ server is auto-detected by its process name.
 
 ## Run in Docker
 
-The reader can run in its own container beside a containerised Squad server,
+The reader can run in its own container beside a Squad server you already run,
 reading the game's memory across the container boundary. It needs two
 capabilities and a shared PID namespace — nothing else, and no changes to the
 game's image.
 
+**This stack runs the reader only.** It never starts a Squad server: yours is
+expected to exist already, either in a container of your own or natively on the
+host. Nothing here downloads the game.
+
 ```bash
-cp .env.example .env               # then uncomment ONE mode block in it
-mkdir -p squad-data && chown 1000:1000 squad-data   # mode 1 only — see below
+cp .env.example .env      # uncomment ONE mode block, and set SQUAD_DATA
 docker compose up -d
 ```
 
-`.env` is required: Compose can default the PID mode but not the profile that
-creates the game service, so the mode is stated rather than guessed. Running
-without it prints exactly which file to copy.
+`.env` is required, and so are the two values in it. Neither the game process
+nor its install directory exists inside this stack, so neither can carry a
+default that could be right — running without them names exactly what is
+missing.
 
-### Three modes
+### Two modes
 
-| Your setup | `SQUAD_PID_MODE` | `COMPOSE_PROFILES` | `SQUAD_APPARMOR` |
-|---|---|---|---|
-| No Squad server yet — run one here | `service:squad` | `bundled-squad` | `docker-default` |
-| A Squad container you already run | `container:<name>` | *(empty)* | `docker-default` |
-| Squad native on the host (LinuxGSM) | `host` | *(empty)* | `unconfined` |
+| Your setup | `SQUAD_PID_MODE` | `SQUAD_APPARMOR` |
+|---|---|---|
+| A Squad container you already run | `container:<name>` | `docker-default` |
+| Squad native on the host (LinuxGSM, bare metal) | `host` | `unconfined` |
 
 Host mode needs `apparmor=unconfined` because Docker's `docker-default` profile
 permits ptrace only toward peers under the same profile; an unconfined host
 process is refused at `/proc/<pid>/maps`, before the reader reaches any memory.
 
-**In modes 1 and 2 the reader does not survive a game CONTAINER restart.** It
+**In container mode the reader does not survive a game CONTAINER restart.** It
 joins the game container's PID namespace as a member, not as that namespace's
 init. `stop_grace_period: 30s` and the exec-to-PID-1 design protect a
 `docker stop`/SIGTERM of the *reader itself*, and a game PROCESS restart
@@ -106,16 +109,16 @@ re-resolves it. But if the game container restarts (it runs
 `restart: unless-stopped`), the kernel SIGKILLs every remaining member of that
 PID namespace when its init exits, the reader included, with no chance to run
 `finalize_recording` — an in-flight recording is left without its
-`.meta.json` sidecar. Only mode 3 is exempt, since there the reader shares the
+`.meta.json` sidecar. Host mode is exempt, since there the reader shares the
 *host's* PID namespace instead.
 
-**Mode 3's authority is broader than "read-only" suggests.** `pid: host` +
+**Host mode's authority is broader than "read-only" suggests.** `pid: host` +
 `apparmor=unconfined` + `SYS_PTRACE` + running as uid 0 (not user-namespaced)
 lets the container ptrace *any* host process, not just the game — that is read
 access to all host process memory and, via `PTRACE_ATTACH`, a container-escape
 primitive. "The reader is still read-only" (below) describes what the reader's
-own code does, not the authority the container holds. Choose mode 3 only on a
-host you already trust at root level; modes 1 and 2 stay bounded to the peer
+own code does, not the authority the container holds. Choose host mode only on a
+host you already trust at root level; container mode stays bounded to the peer
 container, since `docker-default`'s ptrace confinement still applies there.
 
 ### Why the reader is privileged
@@ -142,14 +145,11 @@ lifecycles behind one PID 1.
 | `${SQUAD_DATA}:/squad:ro` | the kill-feed log, and nothing else |
 | `sqreader-data:/data` | recordings and `stats/player_stats.db` |
 
-In mode 1 the game writes to `${SQUAD_DATA}` too, and the upstream image runs as
-an unprivileged user (uid 1000), so create it writable by that user first —
-otherwise Docker creates it root-owned on first `up -d` and upstream's SteamCMD
-fails:
-
-```bash
-mkdir -p squad-data && chown 1000:1000 squad-data
-```
+`SQUAD_DATA` is your Squad install root — the directory that *contains*
+`SquadGame/`. It is mounted read-only and the reader writes nothing into it; it
+reads exactly one file, `SquadGame/Saved/Logs/SquadGame.log`. Point it at the
+server you already run (`/home/steam/squad-dedicated` for a `cm2network/squad`
+container, `/home/<user>/serverfiles` for LinuxGSM).
 
 The replay UI is published to `127.0.0.1:8080` by default. Put it behind the
 nginx config in [`deploy/`](deploy/) rather than setting `SQREADER_BIND=0.0.0.0`
@@ -174,11 +174,13 @@ The match being recorded right now is never touched.
 
 ### Troubleshooting
 
-**`no .env found — run: cp .env.example .env`** — exactly that.
+**`required variable SQUAD_PID_MODE is missing a value`** — copy
+`.env.example` to `.env` and uncomment one mode block, as the message says.
 
-**`service "sqreader" depends on undefined service "squad"`** — `SQUAD_PID_MODE`
-is `service:squad` but `COMPOSE_PROFILES` does not contain `bundled-squad`.
-Uncomment a whole mode block, not one line of it.
+**`required variable SQUAD_DATA is missing a value`** — set it to your Squad
+install root, the directory that *contains* `SquadGame/`. There is deliberately
+no default: this stack does not install Squad, so any guess would mount the
+wrong directory and cost you the kill feed silently.
 
 **`PermissionError` on `/proc/<pid>/maps`** — in host mode, set
 `SQUAD_APPARMOR=unconfined`; without it, AppArmor refuses the ptrace check
@@ -187,15 +189,14 @@ lists both `SYS_PTRACE` and `DAC_READ_SEARCH`.
 
 **`entrypoint: WARNING: /squad/SquadGame/Saved/Logs/SquadGame.log is not
 readable`** — the `/squad` mount is wrong. `SQUAD_DATA` must be the install
-root, the directory that *contains* `SquadGame/`. Expected on a first mode-1
-boot while SteamCMD is still downloading; otherwise this degrades quietly —
-the reader keeps running and the stats look plausible while undercounting
-kills.
+root, the directory that *contains* `SquadGame/`. Expected while your server is
+still installing or updating; otherwise this degrades quietly — the reader keeps
+running and the stats look plausible while undercounting kills.
 
 **`[degraded] cannot read the game (...)`** — the reader re-resolves the game
-on every retry, so a first boot simply waits out SteamCMD's initial download.
-Whether that is normal is in the parenthesised reason: `(no SquadGameServer
-process running)` is expected until the game starts; a `PermissionError` in
+on every retry, so it simply waits until your server is up. Whether that is
+normal is in the parenthesised reason: `(no SquadGameServer process running)`
+is expected until the game starts; a `PermissionError` in
 that parenthesis is a capability/AppArmor misconfiguration, not a boot delay
 — see the entry above.
 

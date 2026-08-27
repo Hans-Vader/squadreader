@@ -6,6 +6,23 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- The reader can run in its own container beside a Squad server you already
+  run, reading the game's memory across the container boundary. Getting there
+  by hand is a research project - the game process lives in another PID
+  namespace or on the host, `/proc/<pid>/maps` is gated by ptrace and
+  `/proc/<pid>/mem` by DAC on top of it, and AppArmor's `docker-default`
+  refuses ptrace toward anything not under the same profile. `docker compose
+  up -d` after `cp .env.example .env`; the stack never starts a game server,
+  and the two things it cannot guess - which process to attach to, and where
+  the install lives - are required rather than defaulted, so a wrong guess
+  cannot quietly cost you half the kill feed.
+- The container prunes its own recordings on the same policy as the systemd
+  timer in `deploy/`. Recordings grow by hundreds of MB a day, nothing else
+  deletes them, and on a box that also runs the game a full disk takes Squad
+  down with it - so the valve sits next to the thing that opens it rather than
+  in a second container somebody forgets to start.
+
 ### Fixed
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's

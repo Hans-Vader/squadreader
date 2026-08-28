@@ -36,7 +36,10 @@ services:
       # would mount an empty directory and silently cost you half the kills.
       - ${SQUAD_DATA:?set SQUAD_DATA in .env to your Squad install root — the directory that contains SquadGame/}:/squad:ro
       - sqreader-data:/data
-      # Optional: plugins, alert webhook, central URL. Picked up automatically.
+      # Optional: plugins, alert webhook, central URL — and squad_port, the only
+      # way to name ONE of several servers in host mode. Picked up automatically.
+      # server_id and squad_log_glob are dead here: entrypoint.sh always passes
+      # the flags and a flag beats the config; use SERVER_ID / SQUAD_DATA in .env.
       # - ./sqreader.config.json:/app/sqreader.config.json:ro
 
     environment:

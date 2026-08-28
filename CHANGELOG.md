@@ -22,6 +22,18 @@ follows [Semantic Versioning](https://semver.org/).
   deletes them, and on a box that also runs the game a full disk takes Squad
   down with it - so the valve sits next to the thing that opens it rather than
   in a second container somebody forgets to start.
+- An optional reverse proxy in front of the replay UI, with the certificate
+  handled for you. `docker compose -f docker-compose.yml -f
+  docker-compose.proxy.yml up -d` adds a Caddy container that obtains and
+  renews a Let's Encrypt certificate on its own - no certbot sidecar, no
+  renewal timer, nothing to schedule. It lives in its own compose file because
+  a reverse proxy is the one piece of a deployment somebody usually already
+  has; without the second `-f` nothing about the stack changes. `SQREADER_SITE`
+  picks the mode by its shape - a hostname turns on automatic HTTPS and the
+  HTTP->HTTPS redirect, a bare `:80` turns ACME off entirely for a host where
+  TLS is terminated elsewhere. `LETSENCRYPT_EMAIL`, `PROXY_HTTP_PORT` and
+  `PROXY_HTTPS_PORT` cover the account e-mail and a host that already owns
+  80/443.
 
 ### Fixed
 - On a two-tier recording the viewer discarded every 4 Hz position update. The

@@ -1,11 +1,7 @@
-# sqreader beside a Squad dedicated server.
-#
-# This stack runs the READER ONLY. The game server is yours and lives outside
-# this repo — in a container you already run, or natively on the host. WHICH one
-# the reader attaches to is chosen entirely in .env; see .env.example and start
-# with `cp .env.example .env`. Only `pid` and `security_opt` differ between the
-# two modes; the capability set is identical, because the kernel gates are the
-# same in both.
+# sqreader beside a Squad dedicated server. This stack runs the READER ONLY —
+# the game server is yours and lives outside this repo, in a container you
+# already run or natively on the host. Which one the reader attaches to is
+# chosen entirely in .env; start with `cp .env.example .env`.
 
 services:
   sqreader:
@@ -15,42 +11,32 @@ services:
     image: sqreader:local
     restart: unless-stopped
 
-    # Required, not defaulted. Both values name something OUTSIDE this stack —
-    # a container this compose file does not create, or the host's own PID
-    # namespace — so there is no default that could be right. Better a sentence
-    # than an attach to whatever happens to be there.
+    # Required, not defaulted: this names something OUTSIDE this stack, so no
+    # default could be right.
     pid: "${SQUAD_PID_MODE:?unset — cp .env.example .env, then uncomment ONE mode block in it}"
 
-    # SYS_PTRACE clears the ptrace gate on /proc/<pid>/maps (0444).
-    # DAC_READ_SEARCH clears the DAC gate on /proc/<pid>/mem (0600, owned by the
-    # game's user). BOTH are required; Docker's default set only ever hid the
-    # second one behind DAC_OVERRIDE.
+    # SYS_PTRACE clears the ptrace gate on /proc/<pid>/maps; DAC_READ_SEARCH
+    # clears the DAC gate on /proc/<pid>/mem. Both are required — see README.
     cap_drop: ["ALL"]
     cap_add: ["SYS_PTRACE", "DAC_READ_SEARCH"]
 
-    # docker-default's `ptrace peer=docker-default` covers a peer container but
-    # not an unconfined host process, so host mode needs `unconfined` here and
-    # the other two modes do not.
+    # Host mode needs `unconfined`: docker-default confines ptrace to peers.
     security_opt: ["apparmor=${SQUAD_APPARMOR:-docker-default}"]
 
-    # serve installs a SIGTERM handler and writes the .sqrx footer on the way
-    # out; the 10s default risks a SIGKILL mid-footer.
+    # serve writes the .sqrx footer on SIGTERM; 10s risks a SIGKILL mid-footer.
     stop_grace_period: 30s
 
     ports:
-      # Host side is loopback by default, matching deploy/nginx_reverse-proxy.example.conf.
-      # Set SQREADER_BIND=0.0.0.0 to expose it deliberately.
+      # Loopback by default. Set SQREADER_BIND=0.0.0.0 to expose deliberately.
       - "${SQREADER_BIND:-127.0.0.1}:${SQREADER_PORT:-8080}:8080"
 
     volumes:
-      # Read-only, and only for the kill-feed log. Nothing else is read from here.
-      # Required for the same reason as SQUAD_PID_MODE: nothing in this stack
-      # creates a Squad install, so a default path would mount an empty
-      # directory and silently cost you half the kills.
+      # Read-only, and only for the kill-feed log. Required for the same reason
+      # as SQUAD_PID_MODE: nothing here creates a Squad install, so a default
+      # would mount an empty directory and silently cost you half the kills.
       - ${SQUAD_DATA:?set SQUAD_DATA in .env to your Squad install root — the directory that contains SquadGame/}:/squad:ro
       - sqreader-data:/data
-      # Optional: plugins, alert webhook, central URL. Uncomment to use one —
-      # config.py picks it up from the working directory with no env var needed.
+      # Optional: plugins, alert webhook, central URL. Picked up automatically.
       # - ./sqreader.config.json:/app/sqreader.config.json:ro
 
     environment:
@@ -58,9 +44,7 @@ services:
       SQREADER_HZ: ${SQREADER_HZ:-0.5}
       RECORD_HZ: ${RECORD_HZ:-}
       SQREADER_LOG_LEVEL: ${SQREADER_LOG_LEVEL:-INFO}
-      # Only needed for a config file mounted somewhere OTHER than /app: WORKDIR
-      # is /app and config.py falls back to `Path.cwd() / sqreader.config.json`,
-      # so the mount below is self-sufficient on its own.
+      # Only for a config file mounted somewhere OTHER than /app.
       SQREADER_CONFIG: ${SQREADER_CONFIG:-}
       RETENTION_INTERVAL: ${RETENTION_INTERVAL:-86400}
       RETENTION_MAX_AGE_DAYS: ${RETENTION_MAX_AGE_DAYS:-90}

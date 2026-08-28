@@ -1,0 +1,20 @@
+# Reverse proxy for the replay UI, mounted only by docker-compose.proxy.yml.
+# SQREADER_SITE is a Caddy site address and picks the mode by its shape:
+#   replays.example.com  -> automatic Let's Encrypt cert + HTTP->HTTPS redirect
+#   :80                  -> plain HTTP, no ACME (something else terminates TLS)
+
+# While a domain is still being set up: Let's Encrypt allows only 5 FAILED
+# validations per hostname per hour, and 5 duplicate certificates per week.
+# The staging CA has neither limit.
+# {
+# 	acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+# }
+
+{$SQREADER_SITE} {
+	# Service name, not 127.0.0.1 — loopback here is this container's own.
+	reverse_proxy sqreader:8080
+
+	# Optional ACME account e-mail. Uncomment together with LETSENCRYPT_EMAIL
+	# in .env; an empty value makes Caddy exit at startup.
+	# tls {$LETSENCRYPT_EMAIL}
+}

@@ -30,6 +30,7 @@ import json
 import os
 import re
 import socketserver
+import sys
 import threading
 import time
 import urllib.parse
@@ -381,11 +382,48 @@ def _make_handler(
             return None
 
     class _H(http.server.BaseHTTPRequestHandler):
+        # The replay stream is chunked (no Content-Length is knowable up front),
+        # and chunked framing is HTTP/1.1-only. On stdlib's default HTTP/1.0
+        # status line a conformant client MUST ignore Transfer-Encoding and read
+        # to EOF instead — so Go's net/http (Caddy, Traefik) drops the header and
+        # hands the browser a body with the chunk-size lines still in it, which
+        # then fails to gunzip/unzstd. Chrome applies the same rule, so the port
+        # was equally unreadable direct; nginx de-chunks a 1.0 response anyway,
+        # which is why the nginx deployments never saw it.
+        protocol_version = "HTTP/1.1"
+
+        # Keep-alive is the flip side of 1.1: an idle connection parks its
+        # handler thread, and one that dies without a FIN would park it
+        # forever. stdlib turns an expiry into close_connection, but
+        # StreamRequestHandler.setup arms this on the SOCKET, so it covers
+        # writes too — do_GET drops it for the response and re-arms after, so
+        # it only ever bounds the wait for the next request line. Long enough
+        # that no page load reopens a connection it could have reused.
+        timeout = 60
+
         # silence stdlib's per-request logging — too noisy at 5 Hz
         def log_message(self, *_args) -> None:
             pass
 
         def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
+            # See `timeout` above: armed for the idle wait, off for the answer.
+            self.connection.settimeout(None)
+            try:
+                self._dispatch()
+            finally:
+                self.connection.settimeout(self.timeout)
+
+        def _dispatch(self) -> None:
+            # Nothing here reads a request body, and under keep-alive an unread
+            # one is parsed as the NEXT request on the connection — one GET in,
+            # two responses out. Close instead of draining: a chunked body
+            # cannot be drained without a parser stdlib does not hand us.
+            # Exactly one "Content-Length: 0" means no body and keeps the
+            # connection; get_all, not get, because a duplicated header whose
+            # FIRST value is 0 would otherwise smuggle the rest past this.
+            if (self.headers.get_all("Content-Length", ["0"]) != ["0"]
+                    or self.headers.get("Transfer-Encoding")):
+                self.close_connection = True
             path = self.path.split("?", 1)[0]
             # /api/recording/<id>[/meta] — variable path, handle first
             if path.startswith("/api/recording/"):
@@ -968,9 +1006,17 @@ def _make_handler(
                     self.end_headers()
                     return
 
+            # Announcing 1.1 does not make the CLIENT 1.1, and chunked toward
+            # a 1.0 client is the same corruption in the other direction: it
+            # must ignore the framing and read to EOF. So frame for 1.1 and
+            # delimit by close for anything older — legal, and what 1.0 means.
+            chunked = self.request_version >= "HTTP/1.1"
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
-            self.send_header("Transfer-Encoding", "chunked")
+            if chunked:
+                self.send_header("Transfer-Encoding", "chunked")
+            else:
+                self.send_header("Connection", "close")  # sets close_connection
             self.send_header("Vary", "Accept-Encoding")
             if enc != "identity":
                 self.send_header("Content-Encoding", enc)
@@ -986,9 +1032,11 @@ def _make_handler(
             def _chunk(data: bytes) -> None:
                 # HTTP/1.1 chunked: hex-length + \r\n + data + \r\n. Never emit a
                 # zero-length chunk — that byte sequence terminates the body.
-                if data:
-                    self.wfile.write(
-                        f"{len(data):x}\r\n".encode("ascii") + data + b"\r\n")
+                if not data:
+                    return
+                if chunked:
+                    data = f"{len(data):x}\r\n".encode("ascii") + data + b"\r\n"
+                self.wfile.write(data)
 
             try:
                 with SqrxReader(sqrx) as r:
@@ -1004,11 +1052,14 @@ def _make_handler(
                     else:  # identity — original behavior
                         for line in r:
                             _chunk(line.encode("utf-8") + b"\n")
-                self.wfile.write(b"0\r\n\r\n")
+                if chunked:
+                    self.wfile.write(b"0\r\n\r\n")
                 self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError,
                     ConnectionAbortedError):
-                pass
+                # The body stopped without its terminator, so the framing on
+                # this connection is undefined — do not reuse it.
+                self.close_connection = True
 
     return _H
 
@@ -1017,6 +1068,18 @@ class _ThreadingHTTPServer(socketserver.ThreadingMixIn,
                            http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def handle_error(self, request, client_address) -> None:
+        # Under keep-alive the handler goes back to waiting for another request
+        # on a connection the client may simply drop — and a client that closes
+        # with data still unread in its receive buffer sends RST, so that wait
+        # raises. Normal (close the tab mid-download), but stdlib prints a full
+        # traceback for it, which would bury real errors in the container log.
+        # The handler silences its own per-request logging; this is the same
+        # noise one layer up. Under HTTP/1.0 it could not happen: the server
+        # closed first after every response.
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
 
 def serve_in_background(host: str, port: int, heartbeat: _TickBeat,

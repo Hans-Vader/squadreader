@@ -48,7 +48,10 @@ export function useReplayLoader() {
     replayLoad.total = 0;
     replayLoad.error = false;
     fetchRecordingMeta(id)
-      .then((m) => { if (!cancelled) replayLoad.total = m.ticks ?? 0; })
+      // totalFrames, not ticks: `loaded` counts every snapshot the
+      // reconstructor emits, and a position frame yields one too, so `ticks`
+      // (full frames only) sent the bar far past 100% on a two-tier recording.
+      .then((m) => { if (!cancelled) replayLoad.total = m.totalFrames ?? m.ticks ?? 0; })
       .catch(() => { /* denominator is best-effort; bar falls back to count */ });
     fetchRecordingFrames(id, (n) => { replayLoad.loaded = n; }).then((rawFrames) => {
       replayLoad.active = false;

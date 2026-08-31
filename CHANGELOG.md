@@ -36,6 +36,41 @@ follows [Semantic Versioning](https://semver.org/).
   80/443.
 
 ### Fixed
+- Replays would not play behind the Caddy reverse proxy, while the start page
+  loaded normally. The replay stream is chunked - its length is not knowable
+  before the file is read - but the server announced `HTTP/1.0` on the status
+  line, a version in which chunked framing does not exist, so a conformant
+  reader must ignore `Transfer-Encoding` and read to the end of the connection
+  instead. Go's net/http does exactly that, so Caddy handed the browser a body
+  with the chunk-size lines still inside it and `Content-Encoding: gzip` (or
+  `zstd`) still attached, and nothing can gunzip a stream that begins with
+  `a\r\n`. Chrome applies the same rule, so hitting the port directly was
+  equally broken; nginx de-chunks a 1.0 response regardless, which is why the
+  deployments behind it never saw this. No other endpoint was affected - every
+  other response carries a Content-Length. The server now speaks HTTP/1.1, and
+  the replay endpoint frames for the version the CLIENT spoke rather than the
+  one the server announces - a genuine 1.0 client gets a close-delimited body
+  instead of the same corruption pointed the other way. Operators who worked
+  around it with `header_up Accept-Encoding identity` can drop that line: it
+  gave up a 6-10x smaller transfer, and it was never a safe
+  belt either, because a chunk-size line that happens to parse as a JSON number
+  (`8`, `1e5`) is fed to the viewer as a frame and can latch its
+  packed-or-plain detection the wrong way on the first one it sees. Persistent
+  connections are the flip side of that version, so a GET arriving with a
+  request body now closes the connection rather than leaving the body to be
+  read as the next request on it - nothing in the reader consumes a request
+  body, and one GET answered twice is a poisoned connection in a proxy's
+  upstream pool. An idle connection is reaped after a minute rather than
+  parking its handler thread until a client that may already be gone gets
+  around to closing, and because a client that hangs up with data still
+  unread sends a reset, the wait for that next request no longer dumps a
+  traceback into the log every time somebody closes a tab mid-download.
+- The replay loading bar ran far past 100%. Its denominator was `ticks`, which
+  counts full frames only, while the numerator counts every snapshot the
+  reconstructor emits - and a 4 Hz position frame yields one too. The sidecar
+  has carried the right field all along (`totalFrames`, documented in
+  RecordingMeta as the loader's denominator); only the call site was never
+  moved over.
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's
   decoder had no branch for them at all, so each one came back as a copy of the

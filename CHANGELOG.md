@@ -94,6 +94,10 @@ follows [Semantic Versioning](https://semver.org/).
 - Replay decoding in the browser is about twice as fast: guarding every field
   against one awkward key cost more than half the time, and only that key
   needs it.
+- The Google Analytics tag inherited from upstream is gone, so the web UI no
+  longer contacts Google - which is what PRIVACY.md already promised. A test
+  checks that `frontend/dist/index.html` ships no inline script, so adding one
+  fails the test instead of being silently blocked by the CSP.
 
 ## [1.4.5] - 2026-09-01
 

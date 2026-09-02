@@ -18,10 +18,21 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
 
+    # The Caddyfile enables an access log (client IPs, paths) to stderr. The
+    # default json-file driver never rotates, so cap it here.
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
     environment:
       SQREADER_SITE: "${SQREADER_SITE:?unset — cp .env.example .env, then set it — a hostname for automatic HTTPS, or :80 for plain HTTP}"
       # Read only if the `tls` line in deploy/Caddyfile is uncommented.
       LETSENCRYPT_EMAIL: "${LETSENCRYPT_EMAIL:-}"
+      # No value on purpose: this forwards the variable only when .env actually
+      # sets it, so "unset" reaches Caddy as absent and its own default applies.
+      # "${SQREADER_HSTS:-}" would hand Caddy an empty string instead and turn
+      # the header off for everyone. See deploy/Caddyfile.
+      SQREADER_HSTS:
 
     ports:
       # Port 80 carries the HTTP-01 challenge and the HTTP->HTTPS redirect;

@@ -14,6 +14,39 @@
 	# Service name, not 127.0.0.1 — loopback here is this container's own.
 	reverse_proxy sqreader:8080
 
+	# Caddy adds neither of these on its own. `-Server` drops both Caddy's
+	# banner and the upstream's, which Caddy would otherwise append.
+	#
+	# HSTS closes the first-visit downgrade and is right for Mode A, where the
+	# hostname is yours. It is a footgun in Mode B: an outer TLS terminator
+	# forwards the header over its own HTTPS, which pins the WHOLE hostname —
+	# every sibling service on it — for the full max-age. So the directive comes
+	# from the environment: unset uses the default below, empty removes it
+	# entirely. .env.example turns it off inside the Mode B block.
+	#
+	# 30 days, not the year the hardening checklists print. That year is the
+	# minimum for the HSTS preload list, which this stack does not use, and a
+	# pin outlives the certificate that justified it: while a cert is invalid
+	# — a lost caddy-data volume plus Let's Encrypt's weekly limit, or the
+	# staging CA above — a pinned browser has no "proceed anyway" to click,
+	# and the only way to lift a pin is max-age=0 over WORKING HTTPS. This
+	# site has no login and no cookies, so a year of that trade buys little.
+	# Raise it once renewals have been boring for a while; 31536000 if you
+	# intend to preload.
+	#
+	# Lifting a pin browsers already cached: deleting the header does nothing,
+	# serve max-age=0 over HTTPS until they re-visit:
+	#     SQREADER_HSTS=header Strict-Transport-Security "max-age=0"
+	{$SQREADER_HSTS:header Strict-Transport-Security "max-age=2592000"}
+	header -Server
+
+	# JSON access log to stderr (`docker compose logs proxy`), the only request
+	# record in the
+	# stack: the Python server's per-request log is a deliberate no-op. Rotated
+	# by the `logging:` block in docker-compose.proxy.yml; contains client IPs,
+	# see PRIVACY.md.
+	log
+
 	# Optional ACME account e-mail. Uncomment together with LETSENCRYPT_EMAIL
 	# in .env; an empty value makes Caddy exit at startup.
 	# tls {$LETSENCRYPT_EMAIL}

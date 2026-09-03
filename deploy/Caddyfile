@@ -1,4 +1,5 @@
-# Reverse proxy for the replay UI, mounted only by docker-compose.proxy.yml.
+# Reverse proxy for the replay UI, mounted by docker-compose.proxy.yml. Also
+# usable with a plain `caddy run` outside Docker — see SQREADER_UPSTREAM below.
 # SQREADER_SITE is a Caddy site address and picks the mode by its shape:
 #   replays.example.com  -> automatic Let's Encrypt cert + HTTP->HTTPS redirect
 #   :80                  -> plain HTTP, no ACME (something else terminates TLS)
@@ -11,8 +12,27 @@
 # }
 
 {$SQREADER_SITE} {
-	# Service name, not 127.0.0.1 — loopback here is this container's own.
-	reverse_proxy sqreader:8080
+	# Service name, not 127.0.0.1 — loopback here is this container's own, and
+	# the container always listens on 8080 (SQREADER_PORT only moves the
+	# PUBLISHED host port), so this default fits every compose setup.
+	#
+	# Override it when Caddy runs OUTSIDE compose — the systemd unit in deploy/
+	# serves on 8081. Leave it UNSET to get the default: set-but-empty leaves
+	# reverse_proxy with no upstream at all, which `caddy validate` still calls
+	# valid and which then 503s every request.
+	#     SQREADER_UPSTREAM=127.0.0.1:8081
+	reverse_proxy {$SQREADER_UPSTREAM:sqreader:8080}
+
+	# The reader serves the SPA uncompressed — _handle_spa in sqreader/httpsrv.py
+	# sets Content-Type/Length/Cache-Control and no Content-Encoding, and its
+	# gzip/zstd negotiation is wired to the replay stream only. That leaves the
+	# two eager bundles in dist/index.html at ~429 kB, about 119 kB gzipped.
+	#
+	# Safe in front of the replay stream: a response that ALREADY carries
+	# Content-Encoding is passed through untouched, so the zstd passthrough keeps
+	# spending zero CPU. zstd is listed first because it is preferred when the
+	# client offers both. `Vary: Accept-Encoding` is added automatically.
+	encode zstd gzip
 
 	# Caddy adds neither of these on its own. `-Server` drops both Caddy's
 	# banner and the upstream's, which Caddy would otherwise append.

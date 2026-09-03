@@ -99,7 +99,10 @@ def test_the_two_files_merge_into_one_working_stack(tmp_path):
 
 
 def test_upstream_is_the_service_name_not_loopback():
-    assert "reverse_proxy sqreader:8080" in ACTIVE
+    # SQREADER_UPSTREAM exists so the same file works under a plain `caddy run`
+    # outside compose. The DEFAULT is what the proxy container gets, and there
+    # loopback is the container's own — so it must stay the service name.
+    assert "reverse_proxy {$SQREADER_UPSTREAM:sqreader:8080}" in ACTIVE
     assert not [ln for ln in ACTIVE if "127.0.0.1" in ln or "localhost" in ln]
 
 
@@ -107,7 +110,9 @@ def test_caddy_upstream_matches_the_port_the_entrypoint_serves():
     """entrypoint.sh hardcodes the container-side port; nothing links the two."""
     served = re.findall(r"--port\s+(\d+)", ENTRYPOINT)
     assert served, "entrypoint.sh no longer passes --port"
-    upstream = re.findall(r"reverse_proxy\s+sqreader:(\d+)", "\n".join(ACTIVE))
+    # Tolerates both the bare upstream and the {$VAR:default} wrapper.
+    upstream = re.findall(r"reverse_proxy\s+(?:\{\$\w+:)?sqreader:(\d+)",
+                          "\n".join(ACTIVE))
     assert upstream == served[:1], (
         f"Caddyfile proxies to {upstream}, entrypoint serves on {served}")
 

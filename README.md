@@ -286,7 +286,7 @@ built-in default**, so every value can also be passed on the command line.
 
 Output directories are `serve`/`record` flags (`--recordings-dir`, `--stats-db`,
 `--icons-dir`, `--sqmaps-dir`, `--frontend-dir`) and default next to the repo.
-Example systemd units and an nginx reverse-proxy are in [`deploy/`](deploy/).
+Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
 
 ## What data it collects and where it writes
 

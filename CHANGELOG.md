@@ -95,6 +95,39 @@ follows [Semantic Versioning](https://semver.org/).
   against one awkward key cost more than half the time, and only that key
   needs it.
 
+## [1.4.7] - 2026-09-08
+
+Same agent code as 1.4.6, which was tagged but never produced a binary: the
+build broke on the day Debian 11 went end-of-life. 1.4.6 has no release
+assets; use this one.
+
+### Fixed
+- The build image could no longer be built. `bullseye-security`'s Release
+  file passed its Valid-Until when Debian 11 reached end of life, and apt
+  refuses the entire update over it. Only the freshness check is relaxed -
+  signatures are still verified - because the alternative, moving to
+  bookworm, raises the glibc floor from 2.31 to 2.36 and would kill the
+  binary on the older boxes this base exists to support.
+- `packaging/build.sh` built the image with `-q` and its output redirected to
+  `/dev/null`, so the failure above reached CI as a bare "exit code: 100"
+  with nothing else. It now stays quiet on success and prints the docker
+  output on failure.
+
+## [1.4.6] - 2026-09-08
+
+### Fixed
+- The world-transform self-check added in 1.4.5 only ran in the process
+  that builds full snapshots. In the two-tier recorder that is a separate
+  process from the 4 Hz position sampler, so when Squad moved
+  ComponentToWorld again the full frames were corrected and the position
+  frames were not. The sampler read 0x10 early, which lands in the
+  FTransform's quaternion: positions came out as `x=0.38, y=0.93` with the
+  real x pushed into z, so every entity jumped to the world origin for one
+  frame and back. In the viewer that renders as players teleporting into a
+  vehicle near the middle of the map - one tank showing nineteen passengers
+  drawn from both teams. The sampler now runs the same check, against the
+  vehicles it already has, once per process.
+
 ## [1.4.5] - 2026-09-01
 
 ### Fixed

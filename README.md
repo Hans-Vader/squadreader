@@ -324,9 +324,6 @@ Known gaps:
 - **RAAS capture zones stay unrendered on modded maps.** Their static geometry
   comes from SquadCalc, which does not carry workshop layers. AAS layers are
   unaffected — there the live capture zones carry their own positions.
-- **Only matches recorded afterwards get the map.** The layer travels inside
-  each recorded frame, so adding an entry does not repair `.sqrx` files already
-  on disk.
 - **Overriding a stock layer** (by naming it exactly) replaces its extent but
   not its capture-zone geometry, which stays in the stock layer's coordinates.
   Expect the flags to sit wrong unless the new bounds match the old ones.

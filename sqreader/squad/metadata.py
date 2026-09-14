@@ -16,6 +16,10 @@ Source URLs (downloaded once, hand-refresh on Squad updates):
 A fifth table, capzones.json (static cap-zone geometry), is produced locally
 by scripts/fetch_capzones.py from SquadCalc rather than downloaded here.
 
+A sixth, custom_maps.json, is written by hand and is the only one that is
+OPTIONAL: it carries workshop/modded maps, which none of the upstream sources
+know about. See `_load_custom_maps` for the format.
+
 This module is intentionally read-only and side-effect free at import
 time. Callers do `meta = load_metadata()` once at startup.
 """
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,6 +77,57 @@ def _load_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+_NORM_RE = re.compile(r"[^a-z0-9]")
+
+# Shorter than this and a key stops being a map name and starts being a
+# wildcard: "AB" would prefix-match "Abandoned Quarry RAAS v1".
+_MIN_CUSTOM_KEY = 3
+
+
+def _norm(s: str) -> str:
+    """Letters and digits only, lowercased.
+
+    The admin writing custom_maps.json cannot know how the game spells the
+    layer — `Hrodna_Border_RAAS_v1` and `Hrodna Border RAAS v1` are both
+    plausible and only one is real. Normalising both sides makes the question
+    moot. Same rule as the viewer's mapFallback.ts, deliberately.
+    """
+    return _NORM_RE.sub("", s.lower())
+
+
+def _load_custom_maps(path: Path) -> list[tuple[str, dict[str, Any]]]:
+    """Workshop/modded map bounds, as (normalised key, entry) longest-first.
+
+    The file is optional and hand-written, keyed by MAP name so one entry
+    covers every layer of that mod::
+
+        {"Hrodna Border": {"texture": "HrodnaBorder",
+                           "topLeft":     {"x": -200000, "y": -200000},
+                           "bottomRight": {"x":  200000, "y":  200000}}}
+
+    Sorted longest-first so `Hrodna Border Night` beats `Hrodna Border` on a
+    layer both prefix. Garbage entries are dropped rather than raised on: this
+    runs at reader startup, and a typo here must cost one map, not the match.
+    """
+    raw = _load_json(path)
+    if not isinstance(raw, dict):
+        return []
+    out: list[tuple[str, dict[str, Any]]] = []
+    for key, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        norm = _norm(key)
+        if len(norm) < _MIN_CUSTOM_KEY:
+            continue
+        # mapName/mapId are read downstream (to_raw_layer_key, the heatmap's
+        # bounds) and the admin has no reason to know that, so fill them in
+        # from the key they did write.
+        out.append((norm, {"mapName": key, "mapId": key.replace(" ", ""),
+                           **entry, "custom": True}))
+    out.sort(key=lambda kv: len(kv[0]), reverse=True)
+    return out
+
+
 @dataclass
 class Metadata:
     # Raw tables (kept around so callers can pass them to the frontend
@@ -84,6 +140,9 @@ class Metadata:
     # scripts/fetch_capzones.py from SquadCalc. Keyed by full display layer
     # name (same keys as layer_bounds). Missing file → {} → merge is a no-op.
     capzones: dict[str, Any] = field(default_factory=dict)
+    # Hand-written workshop/modded map bounds, (normalised key, entry) pairs
+    # longest-first. Optional — missing file → [] → lookups are unchanged.
+    custom_maps: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     # Derived reverse indices, built once at construction:
     _role_keyword_to_pool: dict[str, tuple[str, str]] = field(default_factory=dict)
@@ -99,6 +158,7 @@ class Metadata:
             map_config=_load_json(d / "map_config.json") or {},
             layer_bounds=_load_json(d / "layer_bounds.json") or {},
             capzones=_load_json(d / "capzones.json") or {},
+            custom_maps=_load_custom_maps(d / "custom_maps.json"),
         )
         # Build derived indices
         for pool_key, pool in (m.squad_pools.get("infantryPools") or {}).items():
@@ -156,8 +216,19 @@ class Metadata:
         return self.map_config.get(map_id)
 
     def layer_bounds_for(self, layer_name: str | None) -> dict[str, Any] | None:
+        """Bounds + minimap texture for a layer, or None if we don't know it.
+
+        Custom entries are consulted first: the file exists precisely to
+        override, and the only way one can shadow a stock layer is a prefix
+        the admin wrote themselves.
+        """
         if not layer_name:
             return None
+        norm = _norm(layer_name) if self.custom_maps else ""
+        for key, entry in self.custom_maps:
+            # Longest-first, so the first prefix hit is the most specific one.
+            if norm.startswith(key):
+                return entry
         return self.layer_bounds.get(layer_name)
 
     def capzones_for(self, layer_name: str | None) -> list[dict[str, Any]]:

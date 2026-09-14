@@ -35,7 +35,7 @@ agent and played back by the viewer in `frontend/`.
 - **Python ≥ 3.10.**
 - Permission to read the game process's memory: run as **root**, or grant the Python process `CAP_SYS_PTRACE` (and `CAP_DAC_READ_SEARCH`).
 - A running **Squad dedicated server** on the same host. Offsets are reverse-engineered for Squad **v10.4 / SDK v10.4.1**.
-- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node.
+- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node. Without Node, build it in a container instead (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## How a match is recorded
 
@@ -151,9 +151,65 @@ reads exactly one file, `SquadGame/Saved/Logs/SquadGame.log`. Point it at the
 server you already run (`/home/steam/squad-dedicated` for a `cm2network/squad`
 container, `/home/<user>/serverfiles` for LinuxGSM).
 
-The replay UI is published to `127.0.0.1:8080` by default. Put it behind the
-nginx config in [`deploy/`](deploy/) rather than setting `SQREADER_BIND=0.0.0.0`
-on a public box.
+The replay UI is published to `127.0.0.1:8080` by default. Put it behind a
+reverse proxy rather than setting `SQREADER_BIND=0.0.0.0` on a public box.
+
+### Reverse proxy and TLS
+
+Optional, and off unless you ask for it. `docker-compose.proxy.yml` adds a
+Caddy container in front of the replay UI that obtains and renews a Let's
+Encrypt certificate on its own — no certbot sidecar, no renewal timer, nothing
+to schedule:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+```
+
+Omit the second `-f` and no proxy is created; the base compose file is
+unchanged either way. Once the proxy *is* running, later commands that leave
+the second `-f` off warn about an orphan container, because both services share
+one Compose project. Putting
+`COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml` in `.env` makes a
+plain `docker compose up -d` pick up both files and removes the whole class of
+mistake.
+
+One variable picks the mode, because Caddy reads it out of the site address:
+
+| `.env` | What you get |
+|---|---|
+| `SQREADER_SITE=replays.example.com` | automatic Let's Encrypt certificate, background renewal, `80` → `443` redirect |
+| `SQREADER_SITE=:80` | plain HTTP, no ACME at all — for TLS terminated elsewhere, on a load balancer or another machine |
+
+In TLS mode open both `80` and `443`. Caddy will issue over either challenge —
+HTTP-01 on port 80 or TLS-ALPN-01 on port 443 — so 443 alone can work, but port
+80 is also where the HTTP→HTTPS redirect lives, and closing it throws away the
+fallback for whichever challenge fails.
+
+HTTP/3 needs `443/udp` as well, which the compose file publishes alongside the
+TCP mapping. Caddy advertises HTTP/3 by default and browsers cache that
+advertisement, so an unmapped UDP port shows up later as stalled first loads.
+
+**If the host already runs nginx or Apache on 80/443, you want no proxy
+container at all.** Point that webserver at `127.0.0.1:8080`, which the base
+stack publishes anyway.
+[`deploy/nginx_reverse-proxy.example.conf`](deploy/nginx_reverse-proxy.example.conf)
+shows the shape — a single `location ^~ /sqr1/` block that strips the prefix —
+but it was written for the systemd unit in `deploy/`, which serves on **8081**,
+so its `proxy_pass` points there. Behind the Docker stack, either change that
+port to 8080 or set `SQREADER_PORT=8081` in `.env`.
+
+Two things worth checking when the proxy goes in front of an install that was
+already reachable. If you ever set `SQREADER_BIND=0.0.0.0`, set it back to
+`127.0.0.1`: otherwise port 8080 keeps serving the same pages in plaintext on
+every interface, right beside the certificate. And Docker publishes ports by
+writing to nat/PREROUTING, which ufw and firewalld INPUT rules never see — the
+proxy's 80 and 443 are reachable from the internet the moment it starts,
+whatever `ufw status` reports.
+
+The certificates live in the named volume `caddy-data`. Deleting it makes every
+restart order a fresh certificate, which walks straight into Let's Encrypt's
+per-domain weekly limit; while a domain is still being set up, uncomment the
+staging-CA block at the top of [`deploy/Caddyfile`](deploy/Caddyfile) instead.
 
 ### Recording retention
 
@@ -230,7 +286,7 @@ built-in default**, so every value can also be passed on the command line.
 
 Output directories are `serve`/`record` flags (`--recordings-dir`, `--stats-db`,
 `--icons-dir`, `--sqmaps-dir`, `--frontend-dir`) and default next to the repo.
-Example systemd units and an nginx reverse-proxy are in [`deploy/`](deploy/).
+Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
 
 ## What data it collects and where it writes
 

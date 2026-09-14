@@ -24,7 +24,8 @@ frontend/node_modules/
 frontend/dist-ssr/
 node_modules/
 # NOTE: frontend/dist/ IS committed (prebuilt SPA) so the tool runs without a
-# Node toolchain. Rebuild with `npm run build` after changing the web UI.
+# Node toolchain. Rebuild with `npm run build` (or the docker run one-liner in
+# CONTRIBUTING.md) after changing the web UI, and commit the result.
 
 # Editor / OS
 .vscode/

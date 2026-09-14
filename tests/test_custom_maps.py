@@ -29,11 +29,13 @@ CUSTOM = {
         "topLeft": {"x": -100000, "y": -100000},
         "bottomRight": {"x": 100000, "y": 100000},
     },
-    # Too short to be a safe prefix — a stray key like this must not hijack
+    # Too short to be a safe key — a stray one like this must not hijack
     # unrelated layers.
     "AB": {"texture": "Nope", "topLeft": {"x": 0, "y": 0},
            "bottomRight": {"x": 1, "y": 1}},
 }
+
+BOUNDS_OK = {"topLeft": {"x": -1, "y": -1}, "bottomRight": {"x": 1, "y": 1}}
 
 VANILLA = {
     "Narva RAAS v1": {
@@ -111,6 +113,65 @@ def test_no_custom_file_changes_nothing(tmp_path):
 
 def test_malformed_entries_are_skipped_not_fatal(tmp_path):
     md = _md(tmp_path, custom={"Broken": "not a dict", "": {"texture": "x"},
-                               "Good Map": {"texture": "GoodMap"}})
+                               "Good Map": {"texture": "GoodMap", **BOUNDS_OK}})
     assert md.layer_bounds_for("Narva RAAS v1") is not None
     assert md.layer_bounds_for("Good_Map_RAAS_v1")["texture"] == "GoodMap"
+
+
+def test_community_tag_in_front_still_matches(tmp_path):
+    # Communities put their tag BEFORE the map name — 43 of 963 archive
+    # matches, per mapFallback.ts. Anchoring at the start would miss them.
+    md = _md(tmp_path)
+    assert md.layer_bounds_for("SEC 26 Hrodna Border RAAS v1")["texture"] \
+        == "HrodnaBorder"
+    assert md.layer_bounds_for("[GE] Hrodna_Border_AAS_v1")["texture"] \
+        == "HrodnaBorder"
+
+
+def test_loose_custom_key_never_shadows_a_stock_layer(tmp_path):
+    # The whole risk of matching loosely: a modded Narva remake keyed "Narva"
+    # must not drag the stock Narva layers onto the mod's guessed bounds.
+    md = _md(tmp_path, custom={"Narva": {"texture": "NarvaRemake", **BOUNDS_OK}})
+    assert md.layer_bounds_for("Narva RAAS v1")["texture"] == "T_Narva_Minimap"
+
+
+def test_exact_custom_key_does_shadow_a_stock_layer(tmp_path):
+    # Naming a stock layer exactly is unambiguous intent, and the only way to
+    # override one.
+    md = _md(tmp_path, custom={"Narva RAAS v1":
+                               {"texture": "NarvaRemake", **BOUNDS_OK}})
+    assert md.layer_bounds_for("Narva RAAS v1")["texture"] == "NarvaRemake"
+
+
+def test_entry_without_bounds_is_rejected(tmp_path):
+    # A layer block with null corners is worse than none: the viewer treats
+    # any layer block as authoritative and stops falling back (draw.ts:47).
+    md = _md(tmp_path, custom={"Hrodna Border": {"texture": "HrodnaBorder"}})
+    assert md.layer_bounds_for("Hrodna_Border_RAAS_v1") is None
+
+
+def test_non_numeric_and_nonfinite_corners_are_rejected(tmp_path):
+    for bad in ({"x": "0", "y": 0}, {"x": True, "y": 1}, {"x": float("nan"),
+                "y": 1}, {"x": 0}, [0, 0]):
+        md = _md(tmp_path, custom={"Hrodna Border": {
+            "texture": "HrodnaBorder", "topLeft": bad,
+            "bottomRight": {"x": 1, "y": 1}}})
+        assert md.layer_bounds_for("Hrodna_Border_RAAS_v1") is None, bad
+
+
+def test_texture_that_the_server_would_refuse_is_rejected(tmp_path):
+    # httpsrv._SQMAP_NAME_RE answers 400 to these, which the admin never sees.
+    for bad in ("Hrodna Border", "Hrodna.webp", "../etc/passwd", "", 7):
+        md = _md(tmp_path, custom={"Hrodna Border":
+                                   {"texture": bad, **BOUNDS_OK}})
+        assert md.layer_bounds_for("Hrodna_Border_RAAS_v1") is None, bad
+
+
+def test_two_spellings_of_one_key_last_one_wins(tmp_path):
+    # Both normalise to "hrodnaborder". Silently keeping the first would have
+    # the admin editing a dead entry forever.
+    md = _md(tmp_path, custom={
+        "Hrodna Border": {"texture": "Old", **BOUNDS_OK},
+        "Hrodna_Border": {"texture": "Corrected", **BOUNDS_OK}})
+    assert md.layer_bounds_for("Hrodna_Border_RAAS_v1")["texture"] \
+        == "Corrected"

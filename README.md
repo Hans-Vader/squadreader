@@ -302,10 +302,10 @@ Then drop the minimap image next to the stock ones as
 
 - **The key is the MAP name, not the layer name** — one entry covers every
   RAAS/AAS/Invasion/Seed layer of that mod. Matching ignores case, spaces and
-  underscores, so `Hrodna Border` finds `Hrodna_Border_RAAS_v1` whichever way
-  the mod spells it. A more specific key wins (`Hrodna Border Night` beats
-  `Hrodna Border`), and keys under three characters are ignored so a typo
-  cannot swallow unrelated maps.
+  underscores and tolerates a community tag in front, so `Hrodna Border` finds
+  both `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more
+  specific key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys
+  under three characters are ignored so a typo cannot swallow unrelated maps.
 - **`texture` is the filename without extension** and must match
   `[A-Za-z0-9_-]+` — no spaces.
 - **`topLeft`/`bottomRight` are the minimap's world corners in centimetres.**
@@ -313,13 +313,23 @@ Then drop the minimap image next to the stock ones as
   values; failing that, a centred square of the advertised map size is a good
   first guess (4 km → `±200000`), then check a replay and adjust.
 
-A custom entry overrides the bundled one of the same name. Changes are read at
+An entry that is missing its corners, or whose `texture` the server would
+refuse, is dropped with a warning at startup rather than used — a half-written
+entry hides the map the viewer would otherwise have guessed. Changes are read at
 startup, so restart the reader. In Docker both files are baked into the image
 (`COPY . /app`) — rebuild after adding a map.
 
-Known gap: RAAS capture zones stay unrendered on modded maps. Their static
-geometry comes from SquadCalc, which does not carry workshop layers. AAS layers
-are unaffected — there the live capture zones carry their own positions.
+Known gaps:
+
+- **RAAS capture zones stay unrendered on modded maps.** Their static geometry
+  comes from SquadCalc, which does not carry workshop layers. AAS layers are
+  unaffected — there the live capture zones carry their own positions.
+- **Only matches recorded afterwards get the map.** The layer travels inside
+  each recorded frame, so adding an entry does not repair `.sqrx` files already
+  on disk.
+- **Overriding a stock layer** (by naming it exactly) replaces its extent but
+  not its capture-zone geometry, which stays in the stock layer's coordinates.
+  Expect the flags to sit wrong unless the new bounds match the old ones.
 
 ## What data it collects and where it writes
 

@@ -116,27 +116,17 @@ PID namespace when its init exits, the reader included, with no chance to run
 `apparmor=unconfined` + `SYS_PTRACE` + running as uid 0 (not user-namespaced)
 lets the container ptrace *any* host process, not just the game — that is read
 access to all host process memory and, via `PTRACE_ATTACH`, a container-escape
-primitive. "The reader is still read-only" (below) describes what the reader's
-own code does, not the authority the container holds. Choose host mode only on a
-host you already trust at root level; container mode stays bounded to the peer
-container, since `docker-default`'s ptrace confinement still applies there.
+primitive. [The reader is still read-only](docs/docker-capabilities.md)
+describes what the reader's own code does, not the authority the container
+holds. Choose host mode only on a host you already trust at root level;
+container mode stays bounded to the peer container, since `docker-default`'s
+ptrace confinement still applies there.
 
 ### Why the reader is privileged
 
-`cap_drop: [ALL]` plus exactly two capabilities:
-
-- `SYS_PTRACE` — `/proc/<pid>/maps` is mode 0444 but gated by the ptrace check;
-- `DAC_READ_SEARCH` — `/proc/<pid>/mem` is mode 0600 and owned by the game's
-  user, so the DAC check applies on top.
-
-Both are needed. Docker's default capability set appears to work with only
-`SYS_PTRACE`, but only because it still carries `DAC_OVERRIDE`. The reader is
-still read-only: it never opens the game's memory for writing.
-
-Installing the reader *into* the Squad image does not avoid this. It would be a
-sibling of the game process rather than an ancestor, and `ptrace_scope=1` grants
-attach to ancestors only — the same capability, plus a forked image and two
-lifecycles behind one PID 1.
+Two capabilities (`SYS_PTRACE`, `DAC_READ_SEARCH`), nothing else, and read-only.
+Why both are needed, and why bundling the reader into the Squad image doesn't
+avoid it: [docs/docker-capabilities.md](docs/docker-capabilities.md).
 
 ### What is mounted
 

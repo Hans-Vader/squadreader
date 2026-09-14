@@ -31,6 +31,80 @@ follows [Semantic Versioning](https://semver.org/).
   against one awkward key cost more than half the time, and only that key
   needs it.
 
+## [1.4.8] - 2026-09-11
+
+### Fixed
+- The replay download sent `Transfer-Encoding: chunked` to every client,
+  including ones answered with an HTTP/1.0 status line - and HTTP/1.0 has
+  no chunked encoding. Browsers tolerate the contradiction; a strict
+  reverse proxy does not, and reads the hex chunk lengths as part of the
+  recording. The framing now follows the version the client actually
+  spoke: HTTP/1.1 gets a 1.1 status line and chunked (its terminator is
+  how a client knows the download finished rather than died), HTTP/1.0
+  gets the body bare, delimited by the connection close. Reported by a
+  deployment sitting behind such a proxy.
+
+## [1.4.7] - 2026-09-08
+
+Same agent code as 1.4.6, which was tagged but never produced a binary: the
+build broke on the day Debian 11 went end-of-life. 1.4.6 has no release
+assets; use this one.
+
+### Fixed
+- The build image could no longer be built. `bullseye-security`'s Release
+  file passed its Valid-Until when Debian 11 reached end of life, and apt
+  refuses the entire update over it. Only the freshness check is relaxed -
+  signatures are still verified - because the alternative, moving to
+  bookworm, raises the glibc floor from 2.31 to 2.36 and would kill the
+  binary on the older boxes this base exists to support.
+- `packaging/build.sh` built the image with `-q` and its output redirected to
+  `/dev/null`, so the failure above reached CI as a bare "exit code: 100"
+  with nothing else. It now stays quiet on success and prints the docker
+  output on failure.
+
+## [1.4.6] - 2026-09-08
+
+### Fixed
+- The world-transform self-check added in 1.4.5 only ran in the process
+  that builds full snapshots. In the two-tier recorder that is a separate
+  process from the 4 Hz position sampler, so when Squad moved
+  ComponentToWorld again the full frames were corrected and the position
+  frames were not. The sampler read 0x10 early, which lands in the
+  FTransform's quaternion: positions came out as `x=0.38, y=0.93` with the
+  real x pushed into z, so every entity jumped to the world origin for one
+  frame and back. In the viewer that renders as players teleporting into a
+  vehicle near the middle of the map - one tank showing nineteen passengers
+  drawn from both teams. The sampler now runs the same check, against the
+  vehicles it already has, once per process.
+
+## [1.4.5] - 2026-09-01
+
+### Fixed
+- Squad v10.5.3 moved most of the struct fields the reader's hardcoded
+  offsets point at, and the reader did not notice. It kept running, kept
+  reporting itself healthy, and kept recording - writing matches in which
+  every position was `{x: junk, y: 0, z: 1}`. Rally points, vehicle and
+  seat health, turret magazines, and deployable placer attribution were
+  wrong in the same way. Anyone on 1.4.3 or 1.4.4 with Squad v10.5.3 has
+  recordings from that window that cannot be repaired; new ones are
+  correct from the moment this version starts.
+- Offsets are now re-derived from the running binary instead of being
+  read out of a table. Most of the fields involved are UPROPERTYs, so the
+  binary was carrying their real offsets all along; `resolve_paths` reads
+  them at startup and prints what it corrected. The few that reflection
+  cannot see move with a reflected neighbour rather than being left
+  behind.
+- ComponentToWorld - the one that ruined the positions - has neither
+  reflection nor a neighbour to anchor to, so the snapshot now recognises
+  it instead: on a component with no attach parent the world transform is
+  the relative one, which reflection does resolve. The offset is checked
+  against live actors before it is used, and searched for only if the
+  check fails. A split vote keeps the old value; a wrong coordinate in an
+  archive is permanent, a stale one is not.
+- `doctor` resolves paths before it judges them, so it reports on the
+  offsets the reader will actually use rather than on the constants in
+  the source. Cap-zone geometry matching recovers with the positions.
+
 ## [1.4.4] - 2026-08-19
 
 ### Added

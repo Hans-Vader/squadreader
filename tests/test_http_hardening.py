@@ -116,6 +116,14 @@ def test_the_spa_document_carries_a_csp_and_its_assets_do_not(tmp_path):
     assert _header(asset, "Content-Security-Policy") is None, asset
 
 
+def test_dist_index_ships_no_inline_script():
+    """The policy has no hash and no unsafe-inline, so an inline script in
+    dist/index.html would be blocked silently. Fail loudly here instead."""
+    html = (REPO / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+    inline = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>", html)
+    assert inline == [], inline
+
+
 @pytest.mark.parametrize("route", ["/assets/..", "/icons/weapons/x.png"])
 def test_a_directory_where_a_file_was_expected_is_a_404_not_a_traceback(
         tmp_path, route):

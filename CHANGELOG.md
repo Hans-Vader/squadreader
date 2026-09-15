@@ -7,6 +7,12 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- The replay loading bar ran far past 100%. Its denominator was `ticks`, which
+  counts full frames only, while the numerator counts every snapshot the
+  reconstructor emits - and a 4 Hz position frame yields one too. The sidecar
+  has carried the right field all along (`totalFrames`, documented in
+  RecordingMeta as the loader's denominator); only the call site was never
+  moved over.
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's
   decoder had no branch for them at all, so each one came back as a copy of the
@@ -30,6 +36,10 @@ follows [Semantic Versioning](https://semver.org/).
 - Replay decoding in the browser is about twice as fast: guarding every field
   against one awkward key cost more than half the time, and only that key
   needs it.
+- The Google Analytics tag is gone from the web UI, so it no longer
+  contacts Google - which is what PRIVACY.md already promises. A test
+  checks that `frontend/dist/index.html` ships no inline script, so adding
+  one fails the test instead of being silently blocked by the CSP.
 
 ## [1.4.8] - 2026-09-11
 

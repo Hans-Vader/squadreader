@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import http.server
 import json
+import logging
 import os
 import re
 import socketserver
+import sys
 import threading
 import time
 import urllib.parse
@@ -79,6 +81,18 @@ _ICON_MIME = {
 # the bare basename (no path, no extension). Restrict to safe chars.
 _SQMAP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _SQMAP_EXTS = (".webp", ".png", ".jpg", ".jpeg")
+
+log = logging.getLogger(__name__)
+
+# Sent with the SPA document only. Player names read out of game memory end up
+# in the JSON the viewer renders, so a future DOM-injection bug there should be
+# a console error, not script execution: no unsafe-inline anywhere. base-uri
+# matters because Vite builds with base "./": every asset URL is
+# document-relative.
+_SPA_CSP = (
+    "default-src 'self'; object-src 'none'; base-uri 'none'; "
+    "frame-ancestors 'none'; form-action 'self'"
+)
 
 
 class _TickBeat:
@@ -385,6 +399,35 @@ def _make_handler(
         def log_message(self, *_args) -> None:
             pass
 
+        # stdlib's default is "BaseHTTP/0.6 Python/3.x.y" — the interpreter
+        # patch level, on every response, through the proxy and all.
+        def version_string(self) -> str:
+            return "sqreader"
+
+        # Every response path ends here, stdlib's send_error included, so this
+        # is the one place a header for all of them can live.
+        def end_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            super().end_headers()
+
+        def _stats_500(self, e: Exception) -> None:
+            # The exception goes to the operator's log, not into the anonymous
+            # client's status line. log_message is a no-op, so without this a
+            # failing stats DB was invisible server-side.
+            #
+            # A client that hung up mid-response is NOT a stats failure: the
+            # body is written inside the same try as the query, so its
+            # BrokenPipeError lands here. Logging it would bury the signal this
+            # helper exists to raise under routine disconnects, and send_error
+            # would append a second status line to a response that already
+            # sent 200.
+            if isinstance(e, ConnectionError):
+                return
+            # Attacker-controlled, and stdlib accepts a 64KB request line,
+            # while the reader's own container log has no rotation policy.
+            log.warning("stats query failed on %s: %r", self.path[:200], e)
+            self.send_error(500, "stats query failed")
+
         def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
             path = self.path.split("?", 1)[0]
             # /api/recording/<id>[/meta] — variable path, handle first
@@ -540,10 +583,17 @@ def _make_handler(
             except ValueError:
                 self.send_error(400, "icon path escapes root")
                 return
+            if not resolved.is_file():
+                self.send_error(404, "no such icon")
+                return
             try:
                 st = resolved.stat()
                 body = resolved.read_bytes()
-            except FileNotFoundError:
+            except OSError as e:
+                # It exists but will not open: a mount with the wrong uid, not
+                # a missing icon. Still a 404 to the client, but the operator
+                # gets the reason rather than a silently iconless UI.
+                log.warning("cannot read icon %s: %r", resolved, e)
                 self.send_error(404, "no such icon")
                 return
             etag = f'W/"{int(st.st_mtime)}-{st.st_size}"'
@@ -656,15 +706,25 @@ def _make_handler(
             else:
                 self.send_error(404, "no such SPA path")
                 return
+            # `.` and `..` pass the asset charset regex and name a directory.
+            # Rejecting by what the path IS beats catching whatever read_bytes
+            # happens to raise; _resolve_sqmap already gates on is_file().
+            if not target.is_file():
+                self.send_error(404, f"not found: {target.name}")
+                return
             try:
                 body = target.read_bytes()
-            except FileNotFoundError:
+            except OSError as e:
+                # Unreadable rather than absent — see _handle_icon.
+                log.warning("cannot read %s: %r", target, e)
                 self.send_error(404, f"not found: {target.name}")
                 return
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", cache)
+            if ctype.startswith("text/html"):
+                self.send_header("Content-Security-Policy", _SPA_CSP)
             self.end_headers()
             self.wfile.write(body)
 
@@ -710,7 +770,7 @@ def _make_handler(
                 from .stats import search_players
                 self._send_json(search_players(db, q, limit))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_player_profile(self, tail: str) -> None:
             db = self._stats_db_or_404()
@@ -724,7 +784,7 @@ def _make_handler(
                 from .stats import player_profile
                 prof = player_profile(db, eos)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
                 return
             if prof is None:
                 self.send_error(404, "no such player")
@@ -746,7 +806,7 @@ def _make_handler(
                 from .stats import leaderboard
                 self._send_json(leaderboard(db, stat, limit, period))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_weapon_meta(self) -> None:
             db = self._stats_db_or_404()
@@ -762,7 +822,7 @@ def _make_handler(
                 from .stats import weapon_meta
                 self._send_json(weapon_meta(db, period, limit))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_layers(self) -> None:
             db = self._stats_db_or_404()
@@ -772,7 +832,7 @@ def _make_handler(
                 from .stats import layers_with_kills
                 self._send_json(layers_with_kills(db))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_matches(self) -> None:
             db = self._stats_db_or_404()
@@ -788,7 +848,7 @@ def _make_handler(
                 from .stats import list_matches
                 self._send_json(list_matches(db, limit, period))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_match_detail(self, tail: str) -> None:
             db = self._stats_db_or_404()
@@ -802,7 +862,7 @@ def _make_handler(
                 from .stats import match_detail
                 out = match_detail(db, match_id)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
                 return
             if out is None:
                 self.send_error(404, "no such match")
@@ -842,7 +902,7 @@ def _make_handler(
                 out["bounds"] = _layer_bounds(out.get("layerName"))
                 self._send_json(out)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         # ---------- /api/recordings ----------
 
@@ -1048,6 +1108,17 @@ class _ThreadingHTTPServer(socketserver.ThreadingMixIn,
                            http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def handle_error(self, request, client_address) -> None:
+        # A client that hangs up mid-response — closing the tab on the SPA
+        # bundle, a map texture, a replay — leaves data unread in its receive
+        # buffer and so hangs up with RST, which surfaces in the write. Normal,
+        # but stdlib prints a full traceback for it, which would bury real
+        # errors in the container log. The handler silences its own per-request
+        # logging; this is the same noise one layer up. Only the replay body
+        # catches this itself; every other write path lands here.
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
 
 def serve_in_background(host: str, port: int, heartbeat: _TickBeat,

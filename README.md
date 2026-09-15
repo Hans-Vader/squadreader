@@ -35,7 +35,7 @@ agent and played back by the viewer in `frontend/`.
 - **Python ≥ 3.10.**
 - Permission to read the game process's memory: run as **root**, or grant the Python process `CAP_SYS_PTRACE` (and `CAP_DAC_READ_SEARCH`).
 - A running **Squad dedicated server** on the same host. Offsets are reverse-engineered for Squad **v10.4 / SDK v10.4.1**.
-- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node.
+- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node. Without Node, build it in a container instead (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## How a match is recorded
 

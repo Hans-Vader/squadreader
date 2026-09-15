@@ -215,28 +215,40 @@ def test_a_huge_query_string_cannot_write_an_unbounded_log_line(caplog):
 
 @pytest.mark.skipif(__import__("os").geteuid() == 0,
                     reason="root reads through mode 000")
+@pytest.mark.parametrize("victim", ["file", "dir"])
 @pytest.mark.parametrize("route,name", [("/assets/a.js", "asset"),
                                         ("/icons/weapons/x.png", "icon")])
 def test_an_unreadable_file_404s_and_says_why_in_the_log(tmp_path, caplog,
-                                                         route, name):
+                                                         route, name, victim):
     """A bind mount with the wrong uid must not turn the whole viewer into
     silent 404s with nothing in `docker logs` — that is the failure mode the
-    generic 500 body was added to prevent, one screen away."""
+    generic 500 body was added to prevent, one screen away.
+
+    Both shapes, because they fail in different places: stat() needs search
+    permission on the PARENT, not read permission on the file, so a mode-000
+    file still answers is_file() and dies in read_bytes, while a mode-000
+    directory makes is_file() itself raise. A wrong-uid mount is the second.
+    """
     dist = _frontend(tmp_path)
     icons = tmp_path / "icons"
     (icons / "weapons").mkdir(parents=True)
     (icons / "weapons" / "x.png").write_bytes(b"\x89PNG")
-    (dist / "assets" / "a.js").chmod(0o000)
-    (icons / "weapons" / "x.png").chmod(0o000)
+    f = {"asset": dist / "assets" / "a.js",
+         "icon": icons / "weapons" / "x.png"}[name]
+    target = f if victim == "file" else f.parent
+    target.chmod(0o000)
     err = io.StringIO()
-    with caplog.at_level(logging.WARNING, logger="sqreader.httpsrv"), \
-            contextlib.redirect_stderr(err), \
-            _serving(frontend_dir=dist, icons_dir=icons) as port:
-        head, _ = _raw_get(port, route)
+    try:
+        with caplog.at_level(logging.WARNING, logger="sqreader.httpsrv"), \
+                contextlib.redirect_stderr(err), \
+                _serving(frontend_dir=dist, icons_dir=icons) as port:
+            head, _ = _raw_get(port, route)
+    finally:
+        target.chmod(0o755)  # or tmp_path cleanup cannot remove it
     assert _status(head) == b"404", head[:80]
     assert "Traceback" not in err.getvalue(), err.getvalue()[:400]
     assert any("PermissionError" in r.getMessage() for r in caplog.records), \
-        f"{name}: an unreadable file must leave a trace: " \
+        f"{name}/{victim}: an unreadable file must leave a trace: " \
         f"{[r.getMessage() for r in caplog.records]}"
 
 
@@ -285,3 +297,23 @@ def test_a_client_that_hangs_up_mid_response_logs_no_traceback(tmp_path):
             srv.server_close()
 
     assert "Traceback" not in err.getvalue(), err.getvalue()[:600]
+
+
+@pytest.mark.skipif(__import__("os").geteuid() == 0,
+                    reason="root reads through mode 000")
+def test_an_unreadable_sqmaps_dir_404s_instead_of_killing_the_request(tmp_path):
+    """The third file-serving path resolves through _resolve_sqmap, which has
+    no response to send and so cannot report EACCES — it just must not raise
+    it out of the handler."""
+    sqmaps = tmp_path / "sqmaps"
+    sqmaps.mkdir()
+    (sqmaps / "basrah.webp").write_bytes(b"x")
+    sqmaps.chmod(0o000)
+    err = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(err), _serving(sqmaps_dir=sqmaps) as port:
+            head, _ = _raw_get(port, "/sqmaps/basrah")
+    finally:
+        sqmaps.chmod(0o755)
+    assert _status(head) == b"404", head[:80]
+    assert "Traceback" not in err.getvalue(), err.getvalue()[:400]

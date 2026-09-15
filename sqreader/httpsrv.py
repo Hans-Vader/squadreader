@@ -352,7 +352,10 @@ def _resolve_sqmap(sqmaps_dir: Path, name: str) -> Optional[Path]:
         seen.add(stem)
         for ext in _SQMAP_EXTS:
             p = sqmaps_dir / f"{stem}{ext}"
-            if p.is_file():
+            # os.path.isfile, not Path.is_file: this resolver has no response
+            # to send, and is_file() re-raises EACCES — an unreadable sqmaps
+            # directory would escape _handle_sqmap instead of 404ing.
+            if os.path.isfile(p):
                 return p
     return None
 
@@ -583,10 +586,17 @@ def _make_handler(
             except ValueError:
                 self.send_error(400, "icon path escapes root")
                 return
-            if not resolved.is_file():
-                self.send_error(404, "no such icon")
-                return
             try:
+                # is_file() belongs INSIDE the try: pathlib ignores ENOENT and
+                # friends but re-raises EACCES, and the wrong-uid mount below
+                # is usually an unreadable DIRECTORY — stat() needs only search
+                # permission on the parent, so a mode-000 file still answers
+                # is_file() while a mode-000 category directory raises. Outside
+                # the try that escapes the handler: no response at all, plus a
+                # traceback, which is what this branch exists to prevent.
+                if not resolved.is_file():
+                    self.send_error(404, "no such icon")
+                    return
                 st = resolved.stat()
                 body = resolved.read_bytes()
             except OSError as e:
@@ -709,10 +719,12 @@ def _make_handler(
             # `.` and `..` pass the asset charset regex and name a directory.
             # Rejecting by what the path IS beats catching whatever read_bytes
             # happens to raise; _resolve_sqmap already gates on is_file().
-            if not target.is_file():
-                self.send_error(404, f"not found: {target.name}")
-                return
+            # Inside the try, though — see _handle_icon for why EACCES makes
+            # is_file() itself the thing that raises.
             try:
+                if not target.is_file():
+                    self.send_error(404, f"not found: {target.name}")
+                    return
                 body = target.read_bytes()
             except OSError as e:
                 # Unreadable rather than absent — see _handle_icon.

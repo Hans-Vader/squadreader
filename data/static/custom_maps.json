@@ -1,0 +1,7 @@
+{
+  "Hrodna Border": {
+    "texture":     "HrodnaBorder",
+    "topLeft":     { "x": -201579.562500, "y": -201531.250000 },
+    "bottomRight": { "x":  201620.468750, "y":  201665.890625 }
+  }
+}

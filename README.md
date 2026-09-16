@@ -123,8 +123,7 @@ Then drop the minimap image next to the stock ones as
 An entry that is missing its corners, or whose `texture` the server would
 refuse, is dropped with a warning at startup rather than used — a half-written
 entry hides the map the viewer would otherwise have guessed. Changes are read at
-startup, so restart the reader. In Docker both files are baked into the image
-(`COPY . /app`) — rebuild after adding a map.
+startup, so restart the reader.
 
 Known gaps:
 

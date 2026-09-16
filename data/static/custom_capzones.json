@@ -1,0 +1,6688 @@
+{
+ "SU Hrodna Border AAS v1": [
+  {
+   "name": "Highway Homesteads",
+   "cluster": "A1",
+   "position": {
+    "x": -131737.28125,
+    "y": -78559.1875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 6454.183105
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Station",
+   "cluster": "A1",
+   "position": {
+    "x": -107108.875,
+    "y": -51229.6015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica North",
+   "cluster": "A2",
+   "position": {
+    "x": -99893.5078125,
+    "y": -83931.8125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 6454.183105
+    }
+   ]
+  },
+  {
+   "name": "Mechanics Homestead",
+   "cluster": "A2",
+   "position": {
+    "x": -129016.3671875,
+    "y": -115955.7890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 870.3984375,
+     "dy": 1056.046875,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Rural Homesteads",
+   "cluster": "A2",
+   "position": {
+    "x": -108734.703125,
+    "y": -109649.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9799.56543
+    }
+   ]
+  },
+  {
+   "name": "Kowale Homestead",
+   "cluster": "A3",
+   "position": {
+    "x": -79720.5234375,
+    "y": -122471.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "West Kowale Barn",
+   "cluster": "A3",
+   "position": {
+    "x": -51578.47265625,
+    "y": -119727.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4676.294922
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "A3",
+   "position": {
+    "x": -42570.77734375,
+    "y": -81353.3359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -97.640625,
+     "dy": -638.5546875,
+     "radius": 5199.652344
+    }
+   ]
+  },
+  {
+   "name": "Central Kowale",
+   "cluster": "A4",
+   "position": {
+    "x": -20924.333984375,
+    "y": -122077.2421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9175.058594
+    }
+   ]
+  },
+  {
+   "name": "East Kuznica Farm",
+   "cluster": "A4",
+   "position": {
+    "x": -6742.01171875,
+    "y": -79887.6953125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5021.314941
+    }
+   ]
+  },
+  {
+   "name": "East Kowale",
+   "cluster": "A4",
+   "position": {
+    "x": -4462.72265625,
+    "y": -124837.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7025.848633
+    }
+   ]
+  },
+  {
+   "name": "Kowale Rail Bridge",
+   "cluster": "A5",
+   "position": {
+    "x": 18627.171875,
+    "y": -97172.6796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "Lososna Riverside",
+   "cluster": "A5",
+   "position": {
+    "x": 61273.71875,
+    "y": -78576
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0,
+     "radius": 8299.1875
+    }
+   ]
+  },
+  {
+   "name": "Hunters Club",
+   "cluster": "A5",
+   "position": {
+    "x": 34029.91015625,
+    "y": -84054.65625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Guards North",
+   "cluster": "A6",
+   "position": {
+    "x": 92747.28125,
+    "y": -47369.484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Riverside Houses",
+   "cluster": "A6",
+   "position": {
+    "x": 90023.5390625,
+    "y": -63741.6015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4080.482422
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi",
+   "cluster": "A6",
+   "position": {
+    "x": 111957.78125,
+    "y": -25949.90234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "North Bruzgi",
+   "cluster": "A6",
+   "position": {
+    "x": 115268.765625,
+    "y": -40946.72265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3051.340088
+    }
+   ]
+  },
+  {
+   "name": "Firebase Tatyana",
+   "cluster": "A6",
+   "position": {
+    "x": 131530.53125,
+    "y": -56669.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Concrete Company",
+   "cluster": "A7",
+   "position": {
+    "x": 137762.75,
+    "y": -589.8046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Klachki East",
+   "cluster": "A7",
+   "position": {
+    "x": 146447.09375,
+    "y": 19220.2109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Klachki Trainyard",
+   "cluster": "A7",
+   "position": {
+    "x": 144890.3125,
+    "y": -21895.07421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -1201.296875,
+     "dy": 2041.890625,
+     "radius": 5918.90625
+    }
+   ]
+  },
+  {
+   "name": "Kuznica West",
+   "cluster": "B1",
+   "position": {
+    "x": -117089.1171875,
+    "y": -31608.2578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Pund Junction",
+   "cluster": "B1",
+   "position": {
+    "x": -93576.9765625,
+    "y": -21341.56640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -748.5546875,
+     "dy": -99.73828125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Industrial",
+   "cluster": "B1",
+   "position": {
+    "x": -103407.109375,
+    "y": -9851.9853515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 1553.859375,
+     "dy": -59.265625,
+     "radius": 5862.794434
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Southwest",
+   "cluster": "B1",
+   "position": {
+    "x": -115132.78125,
+    "y": -2153.19140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.4990234375,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Cathedral",
+   "cluster": "B2",
+   "position": {
+    "x": -82236.875,
+    "y": -51845.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs",
+   "cluster": "B2",
+   "position": {
+    "x": -73672.859375,
+    "y": -17462.310546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4940.720703
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs North",
+   "cluster": "B2",
+   "position": {
+    "x": -71717.1328125,
+    "y": -30116.6015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4940.720703
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs South",
+   "cluster": "B2",
+   "position": {
+    "x": -71997.671875,
+    "y": -2089.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 558.55859375,
+     "radius": 4784.504883
+    }
+   ]
+  },
+  {
+   "name": "Bippi Market",
+   "cluster": "B3",
+   "position": {
+    "x": -42153.796875,
+    "y": -45428.28515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Kuznica East",
+   "cluster": "B3",
+   "position": {
+    "x": -50725.875,
+    "y": -61051.1171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "B3",
+   "position": {
+    "x": -42570.77734375,
+    "y": -81353.3359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -97.640625,
+     "dy": -638.5546875,
+     "radius": 5199.652344
+    }
+   ]
+  },
+  {
+   "name": "Border Administration",
+   "cluster": "B4",
+   "position": {
+    "x": -8559.78125,
+    "y": -44609.94921875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1158.87890625,
+     "dy": -3221.89453125,
+     "extX": 3316.2855980285676,
+     "extY": 4210.676838783547,
+     "rot": -52.40174865722656
+    }
+   ]
+  },
+  {
+   "name": "TDF Barracks",
+   "cluster": "B4",
+   "position": {
+    "x": 8107.6796875,
+    "y": -52370.9296875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 339.6845703125,
+     "dy": -5111.28125,
+     "extX": 5989.5641222875565,
+     "extY": 4210.676838783547,
+     "rot": -42.91661262512207
+    }
+   ]
+  },
+  {
+   "name": "Truck Customs",
+   "cluster": "B4",
+   "position": {
+    "x": -18286.56640625,
+    "y": -25704.4609375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -569.837890625,
+     "dy": -2717.732421875,
+     "extX": 3307.1902382874396,
+     "extY": 4210.676838783547,
+     "rot": -52.39990234375
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi",
+   "cluster": "B5",
+   "position": {
+    "x": 15613.4951171875,
+    "y": -4796.892578125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 6.9130859375,
+     "dy": -1364.40185546875,
+     "extX": 9645.372016636835,
+     "extY": 5610.122650055804,
+     "rot": 35.844619274139404
+    }
+   ]
+  },
+  {
+   "name": "Hill 28",
+   "cluster": "B5",
+   "position": {
+    "x": -8528.3125,
+    "y": 10911.642578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Duty Free",
+   "cluster": "B5",
+   "position": {
+    "x": 26459.31640625,
+    "y": -16680.71484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Pavels Farm",
+   "cluster": "B6",
+   "position": {
+    "x": 42098.671875,
+    "y": 35724.28125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3226.574463
+    }
+   ]
+  },
+  {
+   "name": "Strubka Ridge Barn",
+   "cluster": "B6",
+   "position": {
+    "x": 66630.5,
+    "y": 52714.8984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3226.574463
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Railway",
+   "cluster": "B6",
+   "position": {
+    "x": 92986.3125,
+    "y": -5409.08935546875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -260.7109375,
+     "dy": 274.24169921875,
+     "extX": 5832.19297573966,
+     "extY": 3567.872651647863,
+     "rot": 122.6158332824707
+    }
+   ]
+  },
+  {
+   "name": "Food Packaging Facility",
+   "cluster": "B6",
+   "position": {
+    "x": 85945.6171875,
+    "y": 20339.857421875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1765.7109375,
+     "dy": 580.703125,
+     "extX": 6918.844681681667,
+     "extY": 4362.634965741137,
+     "rot": 196.36767387390137
+    }
+   ]
+  },
+  {
+   "name": "Quarry",
+   "cluster": "B6",
+   "position": {
+    "x": 75484.0390625,
+    "y": -11368.5625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -4355.765625,
+     "dy": -56.587890625,
+     "extX": 12308.540072048083,
+     "extY": 5324.32200676325,
+     "rot": -6.363251209259033
+    }
+   ]
+  },
+  {
+   "name": "Warehouse",
+   "cluster": "B6",
+   "position": {
+    "x": 38768.078125,
+    "y": 9451.578125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1543.625,
+     "dy": -26.712890625,
+     "extX": 5746.72059175442,
+     "extY": 3623.5593289599346,
+     "rot": -144.43596076965332
+    }
+   ]
+  },
+  {
+   "name": "Klachki Estate",
+   "cluster": "B7",
+   "position": {
+    "x": 134079.53125,
+    "y": 12856.4521484375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 0.0,
+     "dy": 0.0,
+     "extX": 5000,
+     "extY": 3500,
+     "rot": -85.66003036499023
+    }
+   ]
+  },
+  {
+   "name": "Klachki West",
+   "cluster": "B7",
+   "position": {
+    "x": 122275.1953125,
+    "y": 19451.671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo",
+   "cluster": "C1",
+   "position": {
+    "x": -173936.578125,
+    "y": 18763.14453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo Farm",
+   "cluster": "C1",
+   "position": {
+    "x": -167013.15625,
+    "y": 33193.5390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel North",
+   "cluster": "C2",
+   "position": {
+    "x": -153468.265625,
+    "y": 74948.4296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel South",
+   "cluster": "C2",
+   "position": {
+    "x": -153468.265625,
+    "y": 95869.2421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Roadside Lodge",
+   "cluster": "C2",
+   "position": {
+    "x": -142735.75,
+    "y": 48855.02734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3424.374512
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Outskirts",
+   "cluster": "C2",
+   "position": {
+    "x": -103510.4921875,
+    "y": 23602.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Molotov Line Bunker",
+   "cluster": "C3",
+   "position": {
+    "x": -87994.1015625,
+    "y": 51905.09765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Forest",
+   "cluster": "C3",
+   "position": {
+    "x": -56369.77734375,
+    "y": 64753.01171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 272.50390625,
+     "dy": 747.3125,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel Outskirts",
+   "cluster": "C3",
+   "position": {
+    "x": -110154.546875,
+    "y": 73826.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Suspicious Lodge",
+   "cluster": "C3",
+   "position": {
+    "x": -94796.4140625,
+    "y": 90153.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki South",
+   "cluster": "C4",
+   "position": {
+    "x": -38794.953125,
+    "y": 110323.7265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5151.126953
+    }
+   ]
+  },
+  {
+   "name": "Podlipki North",
+   "cluster": "C4",
+   "position": {
+    "x": -29798.900390625,
+    "y": 94682.09375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5198.986816
+    }
+   ]
+  },
+  {
+   "name": "Podlipki South",
+   "cluster": "C4",
+   "position": {
+    "x": -37952.6171875,
+    "y": 143563.125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9105.328125
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki",
+   "cluster": "C5",
+   "position": {
+    "x": 39873.5546875,
+    "y": 144249.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Quarry",
+   "cluster": "C5",
+   "position": {
+    "x": 3951.404296875,
+    "y": 142914.34375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Hillside",
+   "cluster": "C5",
+   "position": {
+    "x": 1034.228515625,
+    "y": 71642.8046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 601.98046875,
+     "dy": 773.4453125,
+     "radius": 5922.86084
+    }
+   ]
+  },
+  {
+   "name": "Scrapyard",
+   "cluster": "C5",
+   "position": {
+    "x": 16501.91796875,
+    "y": 82795.4921875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 601.98046875,
+     "dy": 773.4453125,
+     "radius": 5922.86084
+    }
+   ]
+  },
+  {
+   "name": "Genna's Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 73932.90625,
+    "y": 149978.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 2529.28125,
+     "dy": -957.03125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Barn",
+   "cluster": "C6",
+   "position": {
+    "x": 55395.85546875,
+    "y": 99051.890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4186.102539
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Forest",
+   "cluster": "C6",
+   "position": {
+    "x": 87224.9921875,
+    "y": 115427.0234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Molotov Line Ruins",
+   "cluster": "C6",
+   "position": {
+    "x": 53698.96484375,
+    "y": 79905.703125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 83567.578125,
+    "y": 88217.671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Wheat Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 114359,
+    "y": 141483.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Hunter's Lodge",
+   "cluster": "C6",
+   "position": {
+    "x": 77561.4296875,
+    "y": 169742.75
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -892.015625,
+     "dy": 1147.109375,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Firebase Yakov",
+   "cluster": "C7",
+   "position": {
+    "x": 155921.1875,
+    "y": 80701.8671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Repair Shop",
+   "cluster": "C7",
+   "position": {
+    "x": 128173.0390625,
+    "y": 67578.5546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Pallet Factory",
+   "cluster": "C7",
+   "position": {
+    "x": 133159.09375,
+    "y": 95622.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": -173679.296875,
+    "y": -18860.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8263.195313
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": 186271.375,
+    "y": 49689.3046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8263.195313
+    }
+   ]
+  }
+ ],
+ "SU Hrodna Border Invasion v1": [
+  {
+   "name": "Kuznica Industrial Park",
+   "cluster": "01",
+   "position": {
+    "x": -101864.203125,
+    "y": -7562.7890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 76.53125,
+     "dy": -1802.890625,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Mill",
+   "cluster": "01",
+   "position": {
+    "x": -109559.171875,
+    "y": -69369.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 76.53125,
+     "dy": -1802.890625,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Station",
+   "cluster": "01",
+   "position": {
+    "x": -107742.3515625,
+    "y": -48559.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 76.53125,
+     "dy": -1802.890625,
+     "radius": 6812.765137
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Cargo Terminal",
+   "cluster": "02",
+   "position": {
+    "x": -57767.22265625,
+    "y": -70320.984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Communications Tower",
+   "cluster": "02",
+   "position": {
+    "x": -72312.5078125,
+    "y": -79644.8828125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica East",
+   "cluster": "02",
+   "position": {
+    "x": -51287.234375,
+    "y": -54454.77734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9551.929688
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs",
+   "cluster": "02",
+   "position": {
+    "x": -72254.484375,
+    "y": -16630.75
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4698.614258
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs North",
+   "cluster": "02",
+   "position": {
+    "x": -71600.90625,
+    "y": -29237.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4698.614258
+    }
+   ]
+  },
+  {
+   "name": "Pond Homestead",
+   "cluster": "02",
+   "position": {
+    "x": -28185.1015625,
+    "y": -91163.1015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5590.167969
+    }
+   ]
+  },
+  {
+   "name": "School",
+   "cluster": "02",
+   "position": {
+    "x": -67540.765625,
+    "y": -45781.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Administration",
+   "cluster": "03",
+   "position": {
+    "x": -7383.71875,
+    "y": -47674.91015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7048.737305
+    }
+   ]
+  },
+  {
+   "name": "Hill 28",
+   "cluster": "03",
+   "position": {
+    "x": -8385.35546875,
+    "y": 11806.5234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Train Bridge",
+   "cluster": "03",
+   "position": {
+    "x": 19708.830078125,
+    "y": -96593.9296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5832.078613
+    }
+   ]
+  },
+  {
+   "name": "Crossing",
+   "cluster": "03",
+   "position": {
+    "x": 1046.28125,
+    "y": -26937.78125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6428.566895
+    }
+   ]
+  },
+  {
+   "name": "Truck Customs",
+   "cluster": "03",
+   "position": {
+    "x": -18373.71875,
+    "y": -31119.869140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6428.566895
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Rail Line",
+   "cluster": "04",
+   "position": {
+    "x": 93816.34375,
+    "y": -6057.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6446.084961
+    }
+   ]
+  },
+  {
+   "name": "Border Guards North",
+   "cluster": "04",
+   "position": {
+    "x": 92203.34375,
+    "y": -47697.61328125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi Homesteads",
+   "cluster": "04",
+   "position": {
+    "x": 87294.34375,
+    "y": -29395.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6446.084961
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi",
+   "cluster": "04",
+   "position": {
+    "x": 20292.61328125,
+    "y": -3097.3779296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6376.814453
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi Warehouse",
+   "cluster": "04",
+   "position": {
+    "x": 37318.34375,
+    "y": 8572.984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7500.0
+    }
+   ]
+  },
+  {
+   "name": "Food Processing",
+   "cluster": "04",
+   "position": {
+    "x": 85613.953125,
+    "y": 19841.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -379.4296875,
+     "dy": 453.3125,
+     "radius": 8201.248047
+    }
+   ]
+  },
+  {
+   "name": "Logging Concern",
+   "cluster": "04",
+   "position": {
+    "x": 53027.16796875,
+    "y": -48792.99609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -560.171875,
+     "dy": 561.13671875,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Lososna Riverside",
+   "cluster": "04",
+   "position": {
+    "x": 62500.34375,
+    "y": -80288.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -560.171875,
+     "dy": 561.140625,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Quarry",
+   "cluster": "04",
+   "position": {
+    "x": 72926.2890625,
+    "y": -11331.5625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -560.171875,
+     "dy": 561.13671875,
+     "radius": 11000.0
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi",
+   "cluster": "05",
+   "position": {
+    "x": 112357.5625,
+    "y": -25699.3828125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7630.453125
+    }
+   ]
+  },
+  {
+   "name": "Firebase Tatyana",
+   "cluster": "05",
+   "position": {
+    "x": 131272.15625,
+    "y": -56426.9453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Klachki Estate",
+   "cluster": "05",
+   "position": {
+    "x": 134561.0625,
+    "y": 12064.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Klachki West",
+   "cluster": "05",
+   "position": {
+    "x": 121692.140625,
+    "y": 20996.6171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8288.274414
+    }
+   ]
+  },
+  {
+   "name": "Pallet Factory",
+   "cluster": "05",
+   "position": {
+    "x": 132309.5625,
+    "y": 96088.6171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5603.200195
+    }
+   ]
+  },
+  {
+   "name": "Strubka",
+   "cluster": "05",
+   "position": {
+    "x": 97254.2734375,
+    "y": 67585.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": -175002,
+    "y": -22272.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 10414.447266
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": 186279.0625,
+    "y": 52306.9375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 12356.401367
+    }
+   ]
+  }
+ ],
+ "SU Hrodna Border Invasion v2": [
+  {
+   "name": "Border Administration",
+   "cluster": "01",
+   "position": {
+    "x": -8854.484375,
+    "y": -48041.80859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5451.530273
+    }
+   ]
+  },
+  {
+   "name": "Checkpoint",
+   "cluster": "01",
+   "position": {
+    "x": -14429.8203125,
+    "y": -38747.94140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6173.400391
+    }
+   ]
+  },
+  {
+   "name": "Truck Customs",
+   "cluster": "01",
+   "position": {
+    "x": -18436.7890625,
+    "y": -29967.98828125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4677.490234
+    }
+   ]
+  },
+  {
+   "name": "Bippi",
+   "cluster": "02",
+   "position": {
+    "x": -44076.578125,
+    "y": -45970.1796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9551.929688
+    }
+   ]
+  },
+  {
+   "name": "Communications Tower",
+   "cluster": "02",
+   "position": {
+    "x": -72312.5078125,
+    "y": -79644.8828125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica East",
+   "cluster": "02",
+   "position": {
+    "x": -50828.78125,
+    "y": -58814.87109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9551.929688
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs",
+   "cluster": "02",
+   "position": {
+    "x": -71829.796875,
+    "y": -17359.1484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -865.96875,
+     "dy": -62.046875,
+     "radius": 5374.194336
+    }
+   ]
+  },
+  {
+   "name": "Pond Homestead",
+   "cluster": "02",
+   "position": {
+    "x": -24937.041015625,
+    "y": -91149.53125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7434.905273
+    }
+   ]
+  },
+  {
+   "name": "East Kuznica Farm",
+   "cluster": "02",
+   "position": {
+    "x": -5554.7421875,
+    "y": -79341.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5984.980957
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "02",
+   "position": {
+    "x": -41597.83984375,
+    "y": -83160.0546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7183.959961
+    }
+   ]
+  },
+  {
+   "name": "School",
+   "cluster": "02",
+   "position": {
+    "x": -67540.765625,
+    "y": -45781.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7454.064941
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Industrial",
+   "cluster": "03",
+   "position": {
+    "x": -101433.703125,
+    "y": -10301.47265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -113.203125,
+     "dy": 451.32421875,
+     "radius": 7597.782227
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Mill",
+   "cluster": "03",
+   "position": {
+    "x": -109559.171875,
+    "y": -69369.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 76.53125,
+     "dy": -1802.890625,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica North",
+   "cluster": "03",
+   "position": {
+    "x": -100822.828125,
+    "y": -85907.2734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 64.9921875,
+     "dy": -1531.0703125,
+     "radius": 6793.848145
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Station",
+   "cluster": "03",
+   "position": {
+    "x": -107959.5078125,
+    "y": -50892.24609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 542.375,
+     "dy": -799.77734375,
+     "radius": 5940.178223
+    }
+   ]
+  },
+  {
+   "name": "Kuznica West",
+   "cluster": "03",
+   "position": {
+    "x": -110746.09375,
+    "y": -36627.078125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 144.3125,
+     "dy": 651.00390625,
+     "radius": 4861.985352
+    }
+   ]
+  },
+  {
+   "name": "Auto Shop",
+   "cluster": "04",
+   "position": {
+    "x": -152600.1875,
+    "y": -40716.73046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -421.421875,
+     "dy": 422.140625,
+     "radius": 8275.27832
+    }
+   ]
+  },
+  {
+   "name": "Gladowszczyzna",
+   "cluster": "04",
+   "position": {
+    "x": -167308.484375,
+    "y": -28407.83203125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -421.421875,
+     "dy": 422.142578125,
+     "radius": 8275.27832
+    }
+   ]
+  },
+  {
+   "name": "Highway Homesteads",
+   "cluster": "04",
+   "position": {
+    "x": -132586.859375,
+    "y": -79938.1484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -427.890625,
+     "dy": 428.625,
+     "radius": 8402.338867
+    }
+   ]
+  },
+  {
+   "name": "Kowale Homestead",
+   "cluster": "04",
+   "position": {
+    "x": -79786.40625,
+    "y": -123062.5703125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -545.75,
+     "dy": 546.6875,
+     "radius": 5035.886719
+    }
+   ]
+  },
+  {
+   "name": "Rural Homesteads",
+   "cluster": "04",
+   "position": {
+    "x": -108604.21875,
+    "y": -108828.6875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -545.75,
+     "dy": 546.6875,
+     "radius": 8767.060547
+    }
+   ]
+  },
+  {
+   "name": "Mechanics Homestead",
+   "cluster": "04",
+   "position": {
+    "x": -128831.609375,
+    "y": -114941.5859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -545.75,
+     "dy": 546.6875,
+     "radius": 5452.52832
+    }
+   ]
+  },
+  {
+   "name": "West Kowale",
+   "cluster": "04",
+   "position": {
+    "x": -46381.796875,
+    "y": -124413.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -1982.05078125,
+     "dy": 1258.421875,
+     "radius": 6307.141113
+    }
+   ]
+  },
+  {
+   "name": "Wojnowce",
+   "cluster": "04",
+   "position": {
+    "x": -163050.15625,
+    "y": -59613.07421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -545.75,
+     "dy": 546.6875,
+     "radius": 10716.727539
+    }
+   ]
+  },
+  {
+   "name": "Kowale Hill",
+   "cluster": "05",
+   "position": {
+    "x": -93126.609375,
+    "y": -149162.03125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6428.978516
+    }
+   ]
+  },
+  {
+   "name": "Creek Homesteads",
+   "cluster": "05",
+   "position": {
+    "x": -115579,
+    "y": -149585.53125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 10000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuscin",
+   "cluster": "05",
+   "position": {
+    "x": -105524.6875,
+    "y": -181008.21875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 10000.0
+    }
+   ]
+  },
+  {
+   "name": "Roadside Farm",
+   "cluster": "05",
+   "position": {
+    "x": -162864.21875,
+    "y": -128259.3828125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6837.109863
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": 55465.8125,
+    "y": 21067.046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 10414.447266
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": -169892,
+    "y": -177887.28125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 12356.401367
+    }
+   ]
+  }
+ ],
+ "SU Hrodna Border RAAS v1": [
+  {
+   "name": "Kowale Hill",
+   "cluster": "A1",
+   "position": {
+    "x": -94608.828125,
+    "y": -149175.0625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 724.515625,
+     "dy": -850.0,
+     "radius": 5474.359863
+    }
+   ]
+  },
+  {
+   "name": "Kuscin",
+   "cluster": "A1",
+   "position": {
+    "x": -104832.265625,
+    "y": -180796.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Central Kowale",
+   "cluster": "A2",
+   "position": {
+    "x": -25243.68359375,
+    "y": -126937.2109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5227.95752
+    }
+   ]
+  },
+  {
+   "name": "Kowale Agricultural",
+   "cluster": "A2",
+   "position": {
+    "x": -46326.984375,
+    "y": -168828.0625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Kowale Homestead",
+   "cluster": "A2",
+   "position": {
+    "x": -79720.5234375,
+    "y": -122471.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Pond Farm",
+   "cluster": "A2",
+   "position": {
+    "x": -54206.125,
+    "y": -152613.203125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "East Kuznica Farm",
+   "cluster": "A2",
+   "position": {
+    "x": -5671.8125,
+    "y": -79476.9609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4749.932617
+    }
+   ]
+  },
+  {
+   "name": "Pond Homestead",
+   "cluster": "A2",
+   "position": {
+    "x": -25192.82421875,
+    "y": -93779.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "A2",
+   "position": {
+    "x": -42849.76171875,
+    "y": -82518.9375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5257.153809
+    }
+   ]
+  },
+  {
+   "name": "West Kowale",
+   "cluster": "A2",
+   "position": {
+    "x": -44083.74609375,
+    "y": -126428.4140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5969.567871
+    }
+   ]
+  },
+  {
+   "name": "East Kowale",
+   "cluster": "A2",
+   "position": {
+    "x": -2681.21875,
+    "y": -126212.359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7068.099121
+    }
+   ]
+  },
+  {
+   "name": "Kowale Ridge",
+   "cluster": "A2",
+   "position": {
+    "x": -11903.3125,
+    "y": -109148.078125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5665.371582
+    }
+   ]
+  },
+  {
+   "name": "Campground",
+   "cluster": "A3",
+   "position": {
+    "x": 58688.015625,
+    "y": -135385.96875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5284.702148
+    }
+   ]
+  },
+  {
+   "name": "Forest Preserve North",
+   "cluster": "A3",
+   "position": {
+    "x": 87248.8125,
+    "y": -136526.21875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6476.057617
+    }
+   ]
+  },
+  {
+   "name": "Forest Preserve South",
+   "cluster": "A3",
+   "position": {
+    "x": 55153.8359375,
+    "y": -114781.4609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4695.848633
+    }
+   ]
+  },
+  {
+   "name": "Hunters Club",
+   "cluster": "A3",
+   "position": {
+    "x": 34029.91015625,
+    "y": -84054.65625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kowale Rail Bridge",
+   "cluster": "A3",
+   "position": {
+    "x": 18627.171875,
+    "y": -97172.6796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "Occupied Homestead",
+   "cluster": "A3",
+   "position": {
+    "x": 65520.53125,
+    "y": -167988.15625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Hilltop Cell Tower",
+   "cluster": "A3",
+   "position": {
+    "x": 21520.53125,
+    "y": -171188.15625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9365.233398
+    }
+   ]
+  },
+  {
+   "name": "Entrenchment",
+   "cluster": "A4",
+   "position": {
+    "x": 115073.546875,
+    "y": -161385.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7222.663086
+    }
+   ]
+  },
+  {
+   "name": "Export Office",
+   "cluster": "A4",
+   "position": {
+    "x": 104670.90625,
+    "y": -89849.3203125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Export Terminal North",
+   "cluster": "A4",
+   "position": {
+    "x": 123381.1328125,
+    "y": -110092.9609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6425.224609
+    }
+   ]
+  },
+  {
+   "name": "Export Terminal South",
+   "cluster": "A4",
+   "position": {
+    "x": 111764.90625,
+    "y": -99022.578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6971.472168
+    }
+   ]
+  },
+  {
+   "name": "Gas Storage Woods N",
+   "cluster": "A4",
+   "position": {
+    "x": 131265.140625,
+    "y": -141915.921875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7550.734863
+    }
+   ]
+  },
+  {
+   "name": "Gas Storage Woods S",
+   "cluster": "A4",
+   "position": {
+    "x": 115371.015625,
+    "y": -125591.359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7550.734863
+    }
+   ]
+  },
+  {
+   "name": "Hill 32",
+   "cluster": "A4",
+   "position": {
+    "x": 95155,
+    "y": -111047.2109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 9854.950195
+    }
+   ]
+  },
+  {
+   "name": "Lososna Riverside",
+   "cluster": "A4",
+   "position": {
+    "x": 62705.5546875,
+    "y": -83103.15625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6926.560059
+    }
+   ]
+  },
+  {
+   "name": "Railway Village",
+   "cluster": "A4",
+   "position": {
+    "x": 89837.453125,
+    "y": -75480.671875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -655.21875,
+     "dy": 604.5703125,
+     "extX": 9790.34652444534,
+     "extY": 4266.790364414861,
+     "rot": 43.370479583740234
+    }
+   ]
+  },
+  {
+   "name": "Kulevtsy",
+   "cluster": "A5",
+   "position": {
+    "x": 173868.078125,
+    "y": -103725.6953125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Guards North",
+   "cluster": "A5",
+   "position": {
+    "x": 92747.28125,
+    "y": -47369.484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi Homesteads",
+   "cluster": "A5",
+   "position": {
+    "x": 88100.734375,
+    "y": -27894.43359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5933.72998
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi",
+   "cluster": "A5",
+   "position": {
+    "x": 111957.78125,
+    "y": -25949.90234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "North Bruzgi",
+   "cluster": "A5",
+   "position": {
+    "x": 115273.7265625,
+    "y": -40860.7734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3450.424072
+    }
+   ]
+  },
+  {
+   "name": "Concrete Company",
+   "cluster": "A5",
+   "position": {
+    "x": 137762.75,
+    "y": -589.8046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Firebase Tatyana",
+   "cluster": "A5",
+   "position": {
+    "x": 131530.53125,
+    "y": -56669.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Klachki East",
+   "cluster": "A5",
+   "position": {
+    "x": 146744.015625,
+    "y": 19661.3046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6001.560547
+    }
+   ]
+  },
+  {
+   "name": "Klachki Estate",
+   "cluster": "A5",
+   "position": {
+    "x": 134079.53125,
+    "y": 12856.4375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 0.0,
+     "dy": 0.0,
+     "extX": 5000,
+     "extY": 3500,
+     "rot": -85.65997314453125
+    }
+   ]
+  },
+  {
+   "name": "Klachki West",
+   "cluster": "A5",
+   "position": {
+    "x": 122275.1953125,
+    "y": 19451.6640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Power Line Woods",
+   "cluster": "A5",
+   "position": {
+    "x": 116641.3359375,
+    "y": 392.80859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7963.192383
+    }
+   ]
+  },
+  {
+   "name": "Kulevtsy Fields",
+   "cluster": "A5",
+   "position": {
+    "x": 155511.984375,
+    "y": -74475.6640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Klachki Ridge",
+   "cluster": "A5",
+   "position": {
+    "x": 154424.046875,
+    "y": -440.3984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4389.796387
+    }
+   ]
+  },
+  {
+   "name": "Train Inspection",
+   "cluster": "A5",
+   "position": {
+    "x": 138954.59375,
+    "y": -22605.40234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "M-6 Interchange",
+   "cluster": "A6",
+   "position": {
+    "x": 130922.40625,
+    "y": 40861.484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Firebase Yakov",
+   "cluster": "A6",
+   "position": {
+    "x": 155921.1875,
+    "y": 80701.8671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Pallet Factory",
+   "cluster": "A6",
+   "position": {
+    "x": 133159.09375,
+    "y": 95622.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Repair Shop",
+   "cluster": "A6",
+   "position": {
+    "x": 128173.0390625,
+    "y": 67578.5546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka",
+   "cluster": "A6",
+   "position": {
+    "x": 103910.8125,
+    "y": 69712.421875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -6025.4921875,
+     "dy": -2165.609375,
+     "extX": 12573.2578125,
+     "extY": 4023.15966796875,
+     "rot": -173.05393981933594
+    }
+   ]
+  },
+  {
+   "name": "Strubka Farm",
+   "cluster": "A6",
+   "position": {
+    "x": 83068.484375,
+    "y": 88110.0546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Woodland Farm",
+   "cluster": "A6",
+   "position": {
+    "x": 116022.421875,
+    "y": 97481.4453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka Ridge",
+   "cluster": "A6",
+   "position": {
+    "x": 70308.5,
+    "y": 57670.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8501.541992
+    }
+   ]
+  },
+  {
+   "name": "Strubka Forest",
+   "cluster": "A6",
+   "position": {
+    "x": 55360.71875,
+    "y": 81187.0234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8501.541992
+    }
+   ]
+  },
+  {
+   "name": "Daylidki Mill",
+   "cluster": "A7",
+   "position": {
+    "x": 167111,
+    "y": 124652.1796875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 899.515625,
+     "dy": -401.671875,
+     "extX": 3446.893798828125,
+     "extY": 2530.74951171875,
+     "rot": -86.46452140808105
+    }
+   ]
+  },
+  {
+   "name": "Substation",
+   "cluster": "A7",
+   "position": {
+    "x": 154178.6875,
+    "y": 131751.9375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 1654.71875,
+     "dy": 1458.78125,
+     "radius": 3600.000244
+    }
+   ]
+  },
+  {
+   "name": "Creek Homesteads",
+   "cluster": "B1",
+   "position": {
+    "x": -115020.328125,
+    "y": -149285.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 1323.46875,
+     "dy": -1552.6875,
+     "radius": 10000.0
+    }
+   ]
+  },
+  {
+   "name": "Diagonal Farm",
+   "cluster": "B1",
+   "position": {
+    "x": -152572.703125,
+    "y": -141851.671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica North",
+   "cluster": "B2",
+   "position": {
+    "x": -99534.703125,
+    "y": -84849.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9411.394531
+    }
+   ]
+  },
+  {
+   "name": "Highway Homesteads",
+   "cluster": "B2",
+   "position": {
+    "x": -129859.4609375,
+    "y": -78205.8671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 6454.183105
+    }
+   ]
+  },
+  {
+   "name": "Kowale Homestead",
+   "cluster": "B2",
+   "position": {
+    "x": -79720.5234375,
+    "y": -122471.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Mechanics Homestead",
+   "cluster": "B2",
+   "position": {
+    "x": -129016.3671875,
+    "y": -115955.7890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 870.3984375,
+     "dy": 1056.046875,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Rural Homesteads",
+   "cluster": "B2",
+   "position": {
+    "x": -108734.703125,
+    "y": -109649.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9799.56543
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Cargo Terminal",
+   "cluster": "B3",
+   "position": {
+    "x": -58923.2421875,
+    "y": -72863.59375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -2046.51953125,
+     "dy": 2469.8984375,
+     "extX": 3000,
+     "extY": 10000,
+     "rot": -110.75218200683594
+    }
+   ]
+  },
+  {
+   "name": "Bippi Market",
+   "cluster": "B3",
+   "position": {
+    "x": -45668.6015625,
+    "y": -49311.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Cathedral",
+   "cluster": "B3",
+   "position": {
+    "x": -81252.0234375,
+    "y": -53493.73046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Central",
+   "cluster": "B3",
+   "position": {
+    "x": -92046.2265625,
+    "y": -48232.14453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -517.2890625,
+     "dy": -807.8203125,
+     "radius": 4629.337891
+    }
+   ]
+  },
+  {
+   "name": "Kuznica East",
+   "cluster": "B3",
+   "position": {
+    "x": -50725.875,
+    "y": -61051.1171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Industrial",
+   "cluster": "B3",
+   "position": {
+    "x": -100936.9609375,
+    "y": -10991.44921875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -264.40625,
+     "dy": 1789.8955078125,
+     "extX": 3793.996826171875,
+     "extY": 7471.72119140625,
+     "rot": -100.37583923339844
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs",
+   "cluster": "B3",
+   "position": {
+    "x": -72971.296875,
+    "y": -17165.33984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4666.423828
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs North",
+   "cluster": "B3",
+   "position": {
+    "x": -71405.15625,
+    "y": -30061.72265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4453.456055
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs South",
+   "cluster": "B3",
+   "position": {
+    "x": -69051.375,
+    "y": -390.25
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 558.55859375,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "East Kuznica Farm",
+   "cluster": "B3",
+   "position": {
+    "x": -5671.8125,
+    "y": -79476.9609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4749.932617
+    }
+   ]
+  },
+  {
+   "name": "Pond Homestead",
+   "cluster": "B3",
+   "position": {
+    "x": -25192.82421875,
+    "y": -93779.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "Pund Junction",
+   "cluster": "B3",
+   "position": {
+    "x": -93576.9765625,
+    "y": -21341.56640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -748.5546875,
+     "dy": -99.73828125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "B3",
+   "position": {
+    "x": -42849.76171875,
+    "y": -82518.9375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5257.153809
+    }
+   ]
+  },
+  {
+   "name": "School",
+   "cluster": "B3",
+   "position": {
+    "x": -66878.40625,
+    "y": -45558.21484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Border Forest North",
+   "cluster": "B4",
+   "position": {
+    "x": -30922.6875,
+    "y": 29886.890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5419.687988
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi",
+   "cluster": "B4",
+   "position": {
+    "x": 16045.9091796875,
+    "y": -5279.43212890625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 22.1416015625,
+     "dy": -1471.3427734375,
+     "extX": 9921.498295356976,
+     "extY": 6053.402806906721,
+     "rot": 36.14112186431885
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi Woods",
+   "cluster": "B4",
+   "position": {
+    "x": 32679.41015625,
+    "y": -33287.234375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1167.328125,
+     "dy": -616.52734375,
+     "extX": 5743.012677348834,
+     "extY": 5446.2471434872305,
+     "rot": -28.89203453063965
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi Woods North",
+   "cluster": "B4",
+   "position": {
+    "x": 37477.03125,
+    "y": -60459.67578125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -779.32421875,
+     "dy": -61.34375,
+     "extX": 6680.0779715887675,
+     "extY": 3206.257609528944,
+     "rot": -48.69948768615723
+    }
+   ]
+  },
+  {
+   "name": "Clay Pit",
+   "cluster": "B4",
+   "position": {
+    "x": -38560.515625,
+    "y": -7563.255859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Duty Free",
+   "cluster": "B4",
+   "position": {
+    "x": 26408.45703125,
+    "y": -15042.248046875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 23.849609375,
+     "dy": -846.6904296875,
+     "extX": 4955.404140022423,
+     "extY": 3488.669542759135,
+     "rot": 36.141480922698975
+    }
+   ]
+  },
+  {
+   "name": "Crossing",
+   "cluster": "B4",
+   "position": {
+    "x": 1435.0595703125,
+    "y": -24848.90234375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -569.837890625,
+     "dy": -2717.732421875,
+     "extX": 4906.750969479326,
+     "extY": 4034.6594811020186,
+     "rot": -52.400550842285156
+    }
+   ]
+  },
+  {
+   "name": "Polish Customs",
+   "cluster": "B4",
+   "position": {
+    "x": -13112.19140625,
+    "y": -36169.08203125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -569.837890625,
+     "dy": -2717.73046875,
+     "extX": 4906.750969479326,
+     "extY": 4034.6594811020186,
+     "rot": -52.400550842285156
+    }
+   ]
+  },
+  {
+   "name": "Border Admin",
+   "cluster": "B4",
+   "position": {
+    "x": -9397.71875,
+    "y": -47237.203125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 1040.275390625,
+     "dy": -150.18359375,
+     "extX": 3170.9681342162658,
+     "extY": 4210.676838783547,
+     "rot": -52.401065826416016
+    }
+   ]
+  },
+  {
+   "name": "Truck Customs",
+   "cluster": "B4",
+   "position": {
+    "x": -18286.56640625,
+    "y": -25704.4609375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -569.837890625,
+     "dy": -2717.732421875,
+     "extX": 3307.1902382874396,
+     "extY": 4210.676838783547,
+     "rot": -52.39920425415039
+    }
+   ]
+  },
+  {
+   "name": "Hill 28",
+   "cluster": "B4",
+   "position": {
+    "x": -8528.3125,
+    "y": 10911.642578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Logging Concern",
+   "cluster": "B4",
+   "position": {
+    "x": 51137.44921875,
+    "y": -48280.671875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 226.33984375,
+     "dy": 752.39453125,
+     "extX": 6647.123243026435,
+     "extY": 3577.650411420589,
+     "rot": 61.737815856933594
+    }
+   ]
+  },
+  {
+   "name": "TDF Barracks",
+   "cluster": "B4",
+   "position": {
+    "x": 8384.3671875,
+    "y": -54990.12109375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 52.33203125,
+     "dy": -2924.9296875,
+     "extX": 6168.585664797574,
+     "extY": 4198.482720169122,
+     "rot": -42.82616996765137
+    }
+   ]
+  },
+  {
+   "name": "Border Guards South",
+   "cluster": "B5",
+   "position": {
+    "x": -16728.9609375,
+    "y": 50934.6484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Tracks",
+   "cluster": "B5",
+   "position": {
+    "x": 95542.234375,
+    "y": -6748.96484375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1699.59375,
+     "dy": 1803.3466796875,
+     "extX": 7001.392914318755,
+     "extY": 4062.063598024611,
+     "rot": -54.05822420120239
+    }
+   ]
+  },
+  {
+   "name": "Pood Processing",
+   "cluster": "B5",
+   "position": {
+    "x": 88216.859375,
+    "y": 22419.421875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -2914.375,
+     "dy": -1376.931640625,
+     "extX": 9106.96545989001,
+     "extY": 5283.633691800319,
+     "rot": 17.927103519439697
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Hillside",
+   "cluster": "B5",
+   "position": {
+    "x": 3149.6328125,
+    "y": 72440.46875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Quarry",
+   "cluster": "B5",
+   "position": {
+    "x": 75484.0390625,
+    "y": -11368.5625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -4355.765625,
+     "dy": -56.587890625,
+     "extX": 12308.540072048083,
+     "extY": 5324.32200676325,
+     "rot": -6.363039970397949
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Homestead",
+   "cluster": "B5",
+   "position": {
+    "x": -1411.203125,
+    "y": 38547.51171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4588.267578
+    }
+   ]
+  },
+  {
+   "name": "Timor's Homestead",
+   "cluster": "B5",
+   "position": {
+    "x": 14999.326171875,
+    "y": 34769.3046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Warehouse",
+   "cluster": "B5",
+   "position": {
+    "x": 38768.078125,
+    "y": 9451.578125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1543.625,
+     "dy": -26.712890625,
+     "extX": 5746.72059175442,
+     "extY": 3623.5593289599346,
+     "rot": -144.43596076965332
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi Woods South",
+   "cluster": "B5",
+   "position": {
+    "x": 24902.98828125,
+    "y": 25489.71875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 1532.8671875,
+     "dy": -1807.171875,
+     "radius": 6845.039551
+    }
+   ]
+  },
+  {
+   "name": "Pavel's Farm",
+   "cluster": "B5",
+   "position": {
+    "x": 41885.453125,
+    "y": 38231.6796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 709.203125,
+     "dy": -836.11328125,
+     "radius": 3166.959961
+    }
+   ]
+  },
+  {
+   "name": "Quarry Woods",
+   "cluster": "B5",
+   "position": {
+    "x": 72016.234375,
+    "y": 8151.74609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5067.135742
+    }
+   ]
+  },
+  {
+   "name": "Strubka",
+   "cluster": "B6",
+   "position": {
+    "x": 103910.8125,
+    "y": 69712.421875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -6025.4921875,
+     "dy": -2165.609375,
+     "extX": 12573.2578125,
+     "extY": 4023.15966796875,
+     "rot": -173.05393981933594
+    }
+   ]
+  },
+  {
+   "name": "Strubka Farm",
+   "cluster": "B6",
+   "position": {
+    "x": 83068.484375,
+    "y": 88110.0546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka Forest",
+   "cluster": "B6",
+   "position": {
+    "x": 55360.71875,
+    "y": 81187.0234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8501.541992
+    }
+   ]
+  },
+  {
+   "name": "Strubka Ridge",
+   "cluster": "B6",
+   "position": {
+    "x": 70308.5,
+    "y": 57670.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8501.541992
+    }
+   ]
+  },
+  {
+   "name": "Woodland Farm",
+   "cluster": "B6",
+   "position": {
+    "x": 116022.421875,
+    "y": 97481.4453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Wheat Farm",
+   "cluster": "B7",
+   "position": {
+    "x": 114359,
+    "y": 141483.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Roadside Farm",
+   "cluster": "C1",
+   "position": {
+    "x": -163009.703125,
+    "y": -128369.0703125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Station",
+   "cluster": "C2",
+   "position": {
+    "x": -107292.9453125,
+    "y": -47791.90234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Gladowszczyzna",
+   "cluster": "C2",
+   "position": {
+    "x": -168011.046875,
+    "y": -29318.5625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Golgota",
+   "cluster": "C2",
+   "position": {
+    "x": -127268.3203125,
+    "y": -17714.734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Auto Shop",
+   "cluster": "C2",
+   "position": {
+    "x": -150853.703125,
+    "y": -39058.80859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica West",
+   "cluster": "C2",
+   "position": {
+    "x": -117089.1171875,
+    "y": -31608.2578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Strzelnica",
+   "cluster": "C2",
+   "position": {
+    "x": -177430.5,
+    "y": -94158.6640625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 1552.375,
+     "dy": 473.9765625,
+     "extX": 3723.783016204834,
+     "extY": 10033.479928970337,
+     "rot": -40.05466604232788
+    }
+   ]
+  },
+  {
+   "name": "Wojnowce",
+   "cluster": "C2",
+   "position": {
+    "x": -169692.390625,
+    "y": -60917.5390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Wojnowce East",
+   "cluster": "C2",
+   "position": {
+    "x": -158258.4375,
+    "y": -56549.71484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo",
+   "cluster": "C3",
+   "position": {
+    "x": -173936.578125,
+    "y": 18763.14453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Outskirts",
+   "cluster": "C3",
+   "position": {
+    "x": -104542.078125,
+    "y": 22154.53515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Apartments",
+   "cluster": "C3",
+   "position": {
+    "x": -130866.5234375,
+    "y": -4252.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -737.3203125,
+     "dy": -1151.4228515625,
+     "radius": 6598.416992
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Southwest",
+   "cluster": "C3",
+   "position": {
+    "x": -115132.78125,
+    "y": -2153.19140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.4990234375,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel North",
+   "cluster": "C3",
+   "position": {
+    "x": -153468.265625,
+    "y": 74948.4296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel Outskirts",
+   "cluster": "C3",
+   "position": {
+    "x": -110154.546875,
+    "y": 73826.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel Woods",
+   "cluster": "C3",
+   "position": {
+    "x": -129820.5703125,
+    "y": 65537.21875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel Radio",
+   "cluster": "C3",
+   "position": {
+    "x": -159279.4375,
+    "y": 86096.453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -552.0,
+     "dy": -862.015625,
+     "radius": 11064.129883
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel South",
+   "cluster": "C3",
+   "position": {
+    "x": -151760.375,
+    "y": 98514.640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -684.515625,
+     "dy": -1068.9609375,
+     "radius": 13720.322266
+    }
+   ]
+  },
+  {
+   "name": "Pig Farm",
+   "cluster": "C3",
+   "position": {
+    "x": -88383.3359375,
+    "y": 27671.49609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -286.8828125,
+     "dy": -756.587890625,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Roadside Lodge",
+   "cluster": "C3",
+   "position": {
+    "x": -141948.75,
+    "y": 48640.3671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4580.638672
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo Farm",
+   "cluster": "C3",
+   "position": {
+    "x": -167013.15625,
+    "y": 33193.5390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Farm West",
+   "cluster": "C4",
+   "position": {
+    "x": -128850.484375,
+    "y": 160577.609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Forest South",
+   "cluster": "C4",
+   "position": {
+    "x": -74727.546875,
+    "y": 73920.53125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5797.031738
+    }
+   ]
+  },
+  {
+   "name": "Molotov Line Bunker",
+   "cluster": "C4",
+   "position": {
+    "x": -89314.7421875,
+    "y": 50475.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Suspicious Lodge",
+   "cluster": "C4",
+   "position": {
+    "x": -94796.4140625,
+    "y": 90153.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Farm East",
+   "cluster": "C4",
+   "position": {
+    "x": -107535.3984375,
+    "y": 157065.125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "OP Tsaplya",
+   "cluster": "C4",
+   "position": {
+    "x": -129624.6171875,
+    "y": 137887.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Agricultural",
+   "cluster": "C5",
+   "position": {
+    "x": -59986.83203125,
+    "y": 123006.328125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Central",
+   "cluster": "C5",
+   "position": {
+    "x": -36237.734375,
+    "y": 111041.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki North",
+   "cluster": "C5",
+   "position": {
+    "x": -35604.328125,
+    "y": 88529.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Apartments",
+   "cluster": "C5",
+   "position": {
+    "x": -42305.6484375,
+    "y": 138640.1875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5009.704102
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Church",
+   "cluster": "C5",
+   "position": {
+    "x": -37116.6953125,
+    "y": 147490.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5009.704102
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Stockyard",
+   "cluster": "C5",
+   "position": {
+    "x": -17635.2421875,
+    "y": 88917.828125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -403.841796875,
+     "dy": -1990.046875,
+     "extX": 4586.37238109956,
+     "extY": 2750.9278798771848,
+     "rot": -138.58143615722656
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki",
+   "cluster": "C6",
+   "position": {
+    "x": 39873.5546875,
+    "y": 144249.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Homestead",
+   "cluster": "C6",
+   "position": {
+    "x": 23068.0859375,
+    "y": 166744.375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -892.015625,
+     "dy": 1147.109375,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Quarry",
+   "cluster": "C6",
+   "position": {
+    "x": 5759.72900390625,
+    "y": 144493.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6960.317871
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Ridge",
+   "cluster": "C6",
+   "position": {
+    "x": 1271.541015625,
+    "y": 123226.5546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 3400.0,
+     "dy": -700.0,
+     "radius": 11000.0
+    }
+   ]
+  },
+  {
+   "name": "Scrapyard",
+   "cluster": "C6",
+   "position": {
+    "x": 17000.203125,
+    "y": 83202.0078125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Genna's Farm",
+   "cluster": "C7",
+   "position": {
+    "x": 73932.90625,
+    "y": 149978.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 2529.28125,
+     "dy": -957.03125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Hunter's Lodge",
+   "cluster": "C7",
+   "position": {
+    "x": 77561.4296875,
+    "y": 169742.75
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -892.015625,
+     "dy": 1147.109375,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": -171465.546875,
+    "y": -173602.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -200.984375,
+     "dy": -769.765625,
+     "radius": 11353.743164
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": 173594.15625,
+    "y": 187634.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8263.195313
+    }
+   ]
+  }
+ ],
+ "SU Hrodna Border RAAS v2": [
+  {
+   "name": "Creek Homesteads",
+   "cluster": "A1",
+   "position": {
+    "x": -115020.328125,
+    "y": -149285.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 1323.46875,
+     "dy": -1552.6875,
+     "radius": 10000.0
+    }
+   ]
+  },
+  {
+   "name": "Kowale Hill",
+   "cluster": "A1",
+   "position": {
+    "x": -92905.4375,
+    "y": -148918.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7610.213379
+    }
+   ]
+  },
+  {
+   "name": "Kowale Homestead",
+   "cluster": "A1",
+   "position": {
+    "x": -79720.5234375,
+    "y": -122471.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Rural Homesteads",
+   "cluster": "A2",
+   "position": {
+    "x": -108735.6875,
+    "y": -109649.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9799.56543
+    }
+   ]
+  },
+  {
+   "name": "Kuznica North",
+   "cluster": "A2",
+   "position": {
+    "x": -99893.5078125,
+    "y": -83931.8125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 6454.183105
+    }
+   ]
+  },
+  {
+   "name": "Mechanics Homestead",
+   "cluster": "A2",
+   "position": {
+    "x": -129017.3515625,
+    "y": -115955.7890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 870.3984375,
+     "dy": 1056.046875,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Highway Homesteads",
+   "cluster": "A3",
+   "position": {
+    "x": -131737.28125,
+    "y": -78559.1875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 6454.183105
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Mill",
+   "cluster": "A3",
+   "position": {
+    "x": -111154.8828125,
+    "y": -68696.8359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 3980.12207
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Station",
+   "cluster": "A3",
+   "position": {
+    "x": -106278.359375,
+    "y": -50270.86328125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Lososna Bridge",
+   "cluster": "A3",
+   "position": {
+    "x": -98388.6171875,
+    "y": -66448.40625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Cathedral",
+   "cluster": "A3",
+   "position": {
+    "x": -82835.3984375,
+    "y": -52106.19140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 63.984375,
+     "dy": 295.48046875,
+     "radius": 3243.119385
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Central",
+   "cluster": "A3",
+   "position": {
+    "x": -91218.234375,
+    "y": -45601.74609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -614.015625,
+     "dy": -3372.75,
+     "radius": 4610.042969
+    }
+   ]
+  },
+  {
+   "name": "School",
+   "cluster": "A3",
+   "position": {
+    "x": -66878.40625,
+    "y": -45558.21484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Wojnowce",
+   "cluster": "A3",
+   "position": {
+    "x": -169692.390625,
+    "y": -60917.5390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Wojnowce East",
+   "cluster": "A3",
+   "position": {
+    "x": -158258.4375,
+    "y": -56549.71484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica West",
+   "cluster": "A4",
+   "position": {
+    "x": -117091.359375,
+    "y": -31608.2578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Apartments",
+   "cluster": "A4",
+   "position": {
+    "x": -131029.3125,
+    "y": -6979.4296875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -326.171875,
+     "dy": 1966.35791015625,
+     "extX": 3937.385132114636,
+     "extY": 7471.72119140625,
+     "rot": -70.70774459838867
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Industrial",
+   "cluster": "A4",
+   "position": {
+    "x": -100936.9609375,
+    "y": -10991.44921875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -264.40625,
+     "dy": 1789.8955078125,
+     "extX": 3793.996826171875,
+     "extY": 7471.72119140625,
+     "rot": -100.37583923339844
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs",
+   "cluster": "A4",
+   "position": {
+    "x": -72613.109375,
+    "y": -16733.310546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4494.248047
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs North",
+   "cluster": "A4",
+   "position": {
+    "x": -71302.09375,
+    "y": -29709.451171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4494.248047
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Suburbs South",
+   "cluster": "A4",
+   "position": {
+    "x": -71247.984375,
+    "y": -2462.34375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 558.55859375,
+     "radius": 5001.063965
+    }
+   ]
+  },
+  {
+   "name": "Pund Junction",
+   "cluster": "A4",
+   "position": {
+    "x": -93576.9765625,
+    "y": -21341.56640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -748.5546875,
+     "dy": -99.73828125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Gladowszczyzna",
+   "cluster": "A4",
+   "position": {
+    "x": -168011.046875,
+    "y": -29318.5625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Golgota",
+   "cluster": "A4",
+   "position": {
+    "x": -127411.8125,
+    "y": -16362.2578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Auto Shop",
+   "cluster": "A4",
+   "position": {
+    "x": -151596.8125,
+    "y": -39058.80859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3835.793213
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Southwest",
+   "cluster": "A4",
+   "position": {
+    "x": -114417.640625,
+    "y": -6134.0234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -543.859375,
+     "dy": -849.3154296875,
+     "radius": 4867.14209
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo",
+   "cluster": "A5",
+   "position": {
+    "x": -173936.5625,
+    "y": 18763.140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Roadside Lodge",
+   "cluster": "A5",
+   "position": {
+    "x": -142986.3125,
+    "y": 48947.921875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": -613.03125,
+     "radius": 2839.827881
+    }
+   ]
+  },
+  {
+   "name": "Kuznica Outskirts",
+   "cluster": "A5",
+   "position": {
+    "x": -104542.078125,
+    "y": 22154.53125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Pig Farm",
+   "cluster": "A5",
+   "position": {
+    "x": -88383.34375,
+    "y": 27671.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -286.8828125,
+     "dy": -756.587890625,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Czuprynowo Farm",
+   "cluster": "A5",
+   "position": {
+    "x": -167013.15625,
+    "y": 33193.5390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Molotov Line Bunker",
+   "cluster": "A5",
+   "position": {
+    "x": -89313.75,
+    "y": 50475.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel North",
+   "cluster": "A6",
+   "position": {
+    "x": -153468.28125,
+    "y": 74948.4296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel Outskirts",
+   "cluster": "A6",
+   "position": {
+    "x": -110154.5546875,
+    "y": 73826.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1953125,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Nowodziel South",
+   "cluster": "A6",
+   "position": {
+    "x": -153468.28125,
+    "y": 95869.2421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.1875,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Suspicious Lodge",
+   "cluster": "A6",
+   "position": {
+    "x": -94796.4140625,
+    "y": 90153.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Farm East",
+   "cluster": "A7",
+   "position": {
+    "x": -108725.3359375,
+    "y": 157838.140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Farm West",
+   "cluster": "A7",
+   "position": {
+    "x": -128850.4765625,
+    "y": 160577.609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "OP Tsaplya",
+   "cluster": "A7",
+   "position": {
+    "x": -129624.6171875,
+    "y": 137887.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Central Kowale",
+   "cluster": "B1",
+   "position": {
+    "x": -21029.390625,
+    "y": -122609.09375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9175.058594
+    }
+   ]
+  },
+  {
+   "name": "West Kowale",
+   "cluster": "B1",
+   "position": {
+    "x": -45488.640625,
+    "y": -125785.5625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9334.552734
+    }
+   ]
+  },
+  {
+   "name": "East Kowale",
+   "cluster": "B1",
+   "position": {
+    "x": -1592.125,
+    "y": -122330.7734375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 11110.358398
+    }
+   ]
+  },
+  {
+   "name": "Pond Homestead",
+   "cluster": "B2",
+   "position": {
+    "x": -25201.6875,
+    "y": -93909.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "East Kuznica Farm",
+   "cluster": "B2",
+   "position": {
+    "x": -6010.6796875,
+    "y": -79349.6484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4968.36084
+    }
+   ]
+  },
+  {
+   "name": "Repair Depot",
+   "cluster": "B2",
+   "position": {
+    "x": -43120.484375,
+    "y": -82415.9765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4968.36084
+    }
+   ]
+  },
+  {
+   "name": "Hunters Club",
+   "cluster": "B2",
+   "position": {
+    "x": 34359.046875,
+    "y": -84919.15625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Kowale Rail Bridge",
+   "cluster": "B2",
+   "position": {
+    "x": 19198.71875,
+    "y": -96981.2421875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 579.693359375,
+     "dy": 1217.0078125,
+     "radius": 7916.553711
+    }
+   ]
+  },
+  {
+   "name": "Communications Tower",
+   "cluster": "B2",
+   "position": {
+    "x": -72400.09375,
+    "y": -79895.75
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Bippi Market",
+   "cluster": "B3",
+   "position": {
+    "x": -45668.6015625,
+    "y": -49311.796875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 5562.074707
+    }
+   ]
+  },
+  {
+   "name": "Kuznica East",
+   "cluster": "B3",
+   "position": {
+    "x": -50725.875,
+    "y": -61051.1171875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -782.19140625,
+     "dy": -1221.5,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Administration",
+   "cluster": "B3",
+   "position": {
+    "x": -8559.78125,
+    "y": -44609.94921875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -507.376953125,
+     "dy": -5097.3671875,
+     "extX": 5989.5641222875565,
+     "extY": 4210.676838783547,
+     "rot": -52.4011344909668
+    }
+   ]
+  },
+  {
+   "name": "Logging Concern",
+   "cluster": "B3",
+   "position": {
+    "x": 51137.453125,
+    "y": -48280.671875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 226.33984375,
+     "dy": 752.39453125,
+     "extX": 6647.123243026435,
+     "extY": 3577.650411420589,
+     "rot": 61.737815856933594
+    }
+   ]
+  },
+  {
+   "name": "TDF Barracks",
+   "cluster": "B3",
+   "position": {
+    "x": 8384.3671875,
+    "y": -54990.12109375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 52.3359375,
+     "dy": -2924.9296875,
+     "extX": 6168.585664797574,
+     "extY": 4198.482720169122,
+     "rot": -42.82613658905029
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi",
+   "cluster": "B4",
+   "position": {
+    "x": 16031.6689453125,
+    "y": -5783.068359375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 10.3037109375,
+     "dy": -1580.8681640625,
+     "extX": 9346.362697526565,
+     "extY": 6510.793917428712,
+     "rot": 34.95336103439331
+    }
+   ]
+  },
+  {
+   "name": "Bruzhi Woods",
+   "cluster": "B4",
+   "position": {
+    "x": 26009.984375,
+    "y": -31334.322265625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -513.1640625,
+     "dy": -3785.400390625,
+     "extX": 8055.025692693873,
+     "extY": 5482.437631415033,
+     "rot": -51.572412967681885
+    }
+   ]
+  },
+  {
+   "name": "Clay Pit",
+   "cluster": "B4",
+   "position": {
+    "x": -37459.3671875,
+    "y": -7563.255859375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Crossing",
+   "cluster": "B4",
+   "position": {
+    "x": -448.564453125,
+    "y": -27235.59375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 2090.150390625,
+     "dy": 675.916015625,
+     "extX": 4780.347075086762,
+     "extY": 3961.883301989038,
+     "rot": -51.57423257827759
+    }
+   ]
+  },
+  {
+   "name": "Duty Free",
+   "cluster": "B4",
+   "position": {
+    "x": 25990.287109375,
+    "y": -13380.8896484375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -241.951171875,
+     "dy": -2423.09375,
+     "extX": 3929.049853210205,
+     "extY": 3511.2161886491094,
+     "rot": -51.57423257827759
+    }
+   ]
+  },
+  {
+   "name": "Hill 28",
+   "cluster": "B4",
+   "position": {
+    "x": -8528.3125,
+    "y": 10911.642578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Truck Customs",
+   "cluster": "B4",
+   "position": {
+    "x": -18286.56640625,
+    "y": -25704.4609375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -569.837890625,
+     "dy": -2717.732421875,
+     "extX": 3307.1902382874396,
+     "extY": 4210.676838783547,
+     "rot": -52.39925765991211
+    }
+   ]
+  },
+  {
+   "name": "Warehouse",
+   "cluster": "B4",
+   "position": {
+    "x": 38768.078125,
+    "y": 9451.578125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -1543.625,
+     "dy": -26.712890625,
+     "extX": 5746.72059175442,
+     "extY": 3623.5593289599346,
+     "rot": -144.43596076965332
+    }
+   ]
+  },
+  {
+   "name": "Border Forest North",
+   "cluster": "B5",
+   "position": {
+    "x": -49866.1015625,
+    "y": 47155.88671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Guards South",
+   "cluster": "B5",
+   "position": {
+    "x": -16727.9609375,
+    "y": 50934.6484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Farm",
+   "cluster": "B5",
+   "position": {
+    "x": 704.2890625,
+    "y": 39462.2890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Pavel's Homestead",
+   "cluster": "B5",
+   "position": {
+    "x": 42218.96875,
+    "y": 35755.453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Timor's Homestead",
+   "cluster": "B5",
+   "position": {
+    "x": 15653.3515625,
+    "y": 34987.83984375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Pig Farm",
+   "cluster": "B5",
+   "position": {
+    "x": -88383.3359375,
+    "y": 27671.49609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -286.8828125,
+     "dy": -756.587890625,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Molotov Line Bunker",
+   "cluster": "B5",
+   "position": {
+    "x": -89313.7421875,
+    "y": 50475.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Hillside",
+   "cluster": "B6",
+   "position": {
+    "x": 3149.6328125,
+    "y": 72440.46875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Scrapyard",
+   "cluster": "B6",
+   "position": {
+    "x": 17000.203125,
+    "y": 83202.0078125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Forest South",
+   "cluster": "B6",
+   "position": {
+    "x": -73356.3671875,
+    "y": 72794.359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Suspicious Lodge",
+   "cluster": "B6",
+   "position": {
+    "x": -94796.4140625,
+    "y": 90153.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki North",
+   "cluster": "B6",
+   "position": {
+    "x": -35604.328125,
+    "y": 88529.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Stockyard",
+   "cluster": "B6",
+   "position": {
+    "x": -17171.46875,
+    "y": 89495.0859375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -981.541015625,
+     "dy": -2482.03125,
+     "extX": 4435.240384698904,
+     "extY": 2750.9278798771848,
+     "rot": -138.58143615722656
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Agricultural",
+   "cluster": "B7",
+   "position": {
+    "x": -59986.7265625,
+    "y": 123006.3125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Podlipki Central",
+   "cluster": "B7",
+   "position": {
+    "x": -36237.6953125,
+    "y": 111041.59375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Campground",
+   "cluster": "C1",
+   "position": {
+    "x": 58688.015625,
+    "y": -135385.96875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7939.565918
+    }
+   ]
+  },
+  {
+   "name": "Hilltop Radio Tower",
+   "cluster": "C1",
+   "position": {
+    "x": 21239.91015625,
+    "y": -171426.390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Occupied Homestead",
+   "cluster": "C1",
+   "position": {
+    "x": 65520.53125,
+    "y": -167988.15625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Gas Terminal Woods",
+   "cluster": "C2",
+   "position": {
+    "x": 114768.75,
+    "y": -126860.5234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7222.663086
+    }
+   ]
+  },
+  {
+   "name": "Export Office",
+   "cluster": "C2",
+   "position": {
+    "x": 104670.90625,
+    "y": -89849.3203125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4000.0
+    }
+   ]
+  },
+  {
+   "name": "Export Terminal North",
+   "cluster": "C2",
+   "position": {
+    "x": 123381.1328125,
+    "y": -110092.9609375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6425.224609
+    }
+   ]
+  },
+  {
+   "name": "Export Terminal South",
+   "cluster": "C2",
+   "position": {
+    "x": 111764.90625,
+    "y": -99022.578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6971.472168
+    }
+   ]
+  },
+  {
+   "name": "Hill 32",
+   "cluster": "C2",
+   "position": {
+    "x": 95155,
+    "y": -111047.2109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 9854.950195
+    }
+   ]
+  },
+  {
+   "name": "Lososna Riverside",
+   "cluster": "C2",
+   "position": {
+    "x": 63896.8515625,
+    "y": -81744.5
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 9854.950195
+    }
+   ]
+  },
+  {
+   "name": "Kulevtsy",
+   "cluster": "C2",
+   "position": {
+    "x": 174425.84375,
+    "y": -103205.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Border Guards North",
+   "cluster": "C3",
+   "position": {
+    "x": 92747.28125,
+    "y": -47369.484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi North",
+   "cluster": "C3",
+   "position": {
+    "x": 114861.0859375,
+    "y": -40240.546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3808.468262
+    }
+   ]
+  },
+  {
+   "name": "Riverside Houses East",
+   "cluster": "C3",
+   "position": {
+    "x": 102790.3515625,
+    "y": -51936.19140625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4113.389648
+    }
+   ]
+  },
+  {
+   "name": "Riverside Houses West",
+   "cluster": "C3",
+   "position": {
+    "x": 89329.046875,
+    "y": -62763.81640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4113.389648
+    }
+   ]
+  },
+  {
+   "name": "Bruzgi",
+   "cluster": "C3",
+   "position": {
+    "x": 111957.78125,
+    "y": -25949.90234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8000.0
+    }
+   ]
+  },
+  {
+   "name": "Dog Homestead",
+   "cluster": "C3",
+   "position": {
+    "x": 166382.515625,
+    "y": -46319.87890625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Firebase Tatyana",
+   "cluster": "C3",
+   "position": {
+    "x": 131530.53125,
+    "y": -56669.296875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Kulevtsy Fields",
+   "cluster": "C3",
+   "position": {
+    "x": 155511.984375,
+    "y": -74475.6640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Train Inspection",
+   "cluster": "C3",
+   "position": {
+    "x": 138954.59375,
+    "y": -22605.40234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Concrete Company",
+   "cluster": "C4",
+   "position": {
+    "x": 137762.75,
+    "y": -589.8046875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Klachki East",
+   "cluster": "C4",
+   "position": {
+    "x": 146447.09375,
+    "y": 19220.2109375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Klachki Estate",
+   "cluster": "C4",
+   "position": {
+    "x": 134079.53125,
+    "y": 12856.4375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 0.0,
+     "dy": 0.0,
+     "extX": 5000,
+     "extY": 3500,
+     "rot": -85.65997314453125
+    }
+   ]
+  },
+  {
+   "name": "Klachki West",
+   "cluster": "C4",
+   "position": {
+    "x": 122275.1953125,
+    "y": 19451.6640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "M-6 Checkpoint",
+   "cluster": "C4",
+   "position": {
+    "x": 100414.09375,
+    "y": 31594.68359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 4020.533936
+    }
+   ]
+  },
+  {
+   "name": "Power Line Woods",
+   "cluster": "C4",
+   "position": {
+    "x": 117708.1796875,
+    "y": 2785.1640625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6899.79248
+    }
+   ]
+  },
+  {
+   "name": "M-6 Interchange",
+   "cluster": "C4",
+   "position": {
+    "x": 130922.40625,
+    "y": 40861.484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7655.598145
+    }
+   ]
+  },
+  {
+   "name": "Abandoned Rail Line",
+   "cluster": "C4",
+   "position": {
+    "x": 93830.484375,
+    "y": -5573.734375
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -192.1640625,
+     "dy": 466.88916015625,
+     "extX": 6152.726570917177,
+     "extY": 3878.399935371999,
+     "rot": -52.93032455444336
+    }
+   ]
+  },
+  {
+   "name": "Quarry",
+   "cluster": "C4",
+   "position": {
+    "x": 75484.0390625,
+    "y": -11368.5625
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -4355.765625,
+     "dy": -56.587890625,
+     "extX": 12308.540072048083,
+     "extY": 5324.32200676325,
+     "rot": -6.363046169281006
+    }
+   ]
+  },
+  {
+   "name": "Food Processing",
+   "cluster": "C4",
+   "position": {
+    "x": 84179.59375,
+    "y": 20443.015625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7616.853516
+    }
+   ]
+  },
+  {
+   "name": "Klachki Farm",
+   "cluster": "C4",
+   "position": {
+    "x": 102806,
+    "y": 7973.939453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 6064.14502
+    }
+   ]
+  },
+  {
+   "name": "Firebase Yakov",
+   "cluster": "C5",
+   "position": {
+    "x": 155921.1875,
+    "y": 80701.8671875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Pallet Factory",
+   "cluster": "C5",
+   "position": {
+    "x": 133159.09375,
+    "y": 95622.265625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka",
+   "cluster": "C5",
+   "position": {
+    "x": 103910.8125,
+    "y": 69712.421875
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": -6025.4921875,
+     "dy": -2165.609375,
+     "extX": 12573.2578125,
+     "extY": 4023.15966796875,
+     "rot": -173.05393981933594
+    }
+   ]
+  },
+  {
+   "name": "Woodland Farm",
+   "cluster": "C5",
+   "position": {
+    "x": 116022.421875,
+    "y": 97481.4453125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Repair  Shop",
+   "cluster": "C5",
+   "position": {
+    "x": 128173.0390625,
+    "y": 67578.5546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka Ridge",
+   "cluster": "C5",
+   "position": {
+    "x": 70743.234375,
+    "y": 57716.359375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8339.332031
+    }
+   ]
+  },
+  {
+   "name": "Strubka Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 83068.484375,
+    "y": 88110.0546875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Strubka Forest",
+   "cluster": "C6",
+   "position": {
+    "x": 55360.71875,
+    "y": 81187.0234375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8501.541992
+    }
+   ]
+  },
+  {
+   "name": "Genna's Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 73932.90625,
+    "y": 149978.515625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 2529.28125,
+     "dy": -957.03125,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Daylidki Industrial",
+   "cluster": "C6",
+   "position": {
+    "x": 155438.625,
+    "y": 131965.78125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Wheat Farm",
+   "cluster": "C6",
+   "position": {
+    "x": 114359,
+    "y": 141483.765625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0,
+     "dy": 0.0,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki",
+   "cluster": "C7",
+   "position": {
+    "x": 39873.5546875,
+    "y": 144249.4375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 7000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Homestead",
+   "cluster": "C7",
+   "position": {
+    "x": 23068.0859375,
+    "y": 166744.375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -892.015625,
+     "dy": 1147.109375,
+     "radius": 5000.0
+    }
+   ]
+  },
+  {
+   "name": "Mishkeniki Quarry",
+   "cluster": "C7",
+   "position": {
+    "x": 6235.7578125,
+    "y": 142891.96875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -163.61865234375,
+     "dy": 1213.515625,
+     "radius": 7260.75293
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": -25789.2421875,
+    "y": -173020.75
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": -201.015625,
+     "dy": -769.75,
+     "radius": 11353.743164
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": -44373.83203125,
+    "y": 182413.90625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8263.195313
+    }
+   ]
+  }
+ ],
+ "SU Hrodna Border Seed v1": [
+  {
+   "name": "Truck Customs",
+   "cluster": "01",
+   "position": {
+    "x": -17894.3984375,
+    "y": -29454.150390625
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3639.10498
+    }
+   ]
+  },
+  {
+   "name": "Polish Customs",
+   "cluster": "02",
+   "position": {
+    "x": -14629.486328125,
+    "y": -38829.01953125
+   },
+   "geometry": [
+    {
+     "type": "box",
+     "dx": 0.0,
+     "dy": 0.0,
+     "extX": 3461.3698720932007,
+     "extY": 4845.917820930481,
+     "rot": 36.928104400634766
+    }
+   ]
+  },
+  {
+   "name": "Border Administration",
+   "cluster": "03",
+   "position": {
+    "x": -9137.9091796875,
+    "y": -47203.17578125
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 3753.899902
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "Z",
+   "position": {
+    "x": 11736.75390625,
+    "y": -60675.71484375
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 8902.797852
+    }
+   ]
+  },
+  {
+   "name": "Main",
+   "cluster": "00",
+   "position": {
+    "x": -45479.64453125,
+    "y": -48599.921875
+   },
+   "geometry": [
+    {
+     "type": "sphere",
+     "dx": 0.0,
+     "dy": 0.0,
+     "radius": 6451.222656
+    }
+   ]
+  }
+ ]
+}

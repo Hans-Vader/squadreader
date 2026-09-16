@@ -16,9 +16,10 @@ Source URLs (downloaded once, hand-refresh on Squad updates):
 A fifth table, capzones.json (static cap-zone geometry), is produced locally
 by scripts/fetch_capzones.py from SquadCalc rather than downloaded here.
 
-A sixth, custom_maps.json, is written by hand and is the only one that is
-OPTIONAL: it carries workshop/modded maps, which none of the upstream sources
-know about. See `_load_custom_maps` for the format.
+The last two, custom_maps.json and custom_capzones.json, are written by hand
+and are the only OPTIONAL ones: they carry workshop/modded maps and the cap-zone
+geometry of their layers, which none of the upstream sources know about. See
+`_load_custom_maps` and `_load_custom_capzones` for the formats.
 
 This module is intentionally read-only and side-effect free at import
 time. Callers do `meta = load_metadata()` once at startup.
@@ -190,6 +191,23 @@ def _load_custom_maps(path: Path) -> list[tuple[str, dict[str, Any]]]:
     return sorted(by_norm.items(), key=lambda kv: len(kv[0]), reverse=True)
 
 
+def _load_custom_capzones(path: Path) -> dict[str, Any]:
+    """Hand-written cap-zone geometry for modded layers, keyed normalised.
+
+    Same shape as capzones.json (`{layer: [{name, cluster, position, geometry}]}`)
+    but a separate file, because fetch_capzones.py rewrites capzones.json from
+    the stock layer list — an entry added there is gone after the next run.
+
+    Keys are normalised for the reason `_norm` exists: this file is written from
+    a layer dump that spells the name `SU_Hrodna_Border_RAAS_v2` while the live
+    reader may hand us `SU Hrodna Border RAAS v2`.
+    """
+    raw = _load_json(path)
+    if not isinstance(raw, dict):
+        return {}
+    return {_norm(k): v for k, v in raw.items() if isinstance(v, list)}
+
+
 @dataclass
 class Metadata:
     # Raw tables (kept around so callers can pass them to the frontend
@@ -205,6 +223,9 @@ class Metadata:
     # Hand-written workshop/modded map bounds, (normalised key, entry) pairs
     # longest-first. Optional — missing file → [] → lookups are unchanged.
     custom_maps: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    # Hand-written cap-zone geometry for modded layers, keyed by normalised
+    # layer name. Optional — missing file → {} → lookups are unchanged.
+    custom_capzones: dict[str, Any] = field(default_factory=dict)
 
     # Derived reverse indices, built once at construction:
     _role_keyword_to_pool: dict[str, tuple[str, str]] = field(default_factory=dict)
@@ -221,6 +242,7 @@ class Metadata:
             layer_bounds=_load_json(d / "layer_bounds.json") or {},
             capzones=_load_json(d / "capzones.json") or {},
             custom_maps=_load_custom_maps(d / "custom_maps.json"),
+            custom_capzones=_load_custom_capzones(d / "custom_capzones.json"),
         )
         # Build derived indices
         for pool_key, pool in (m.squad_pools.get("infantryPools") or {}).items():
@@ -314,10 +336,16 @@ class Metadata:
         Keyed identically to layer_bounds (full display layer name), so the
         caller passes the same game_state["mapName"] it uses for bounds — no
         RawLayerKey conversion at runtime (that happens once, offline).
+
+        A custom entry wins: it names the layer in full, so — unlike the loose
+        map-name keys of custom_maps — writing one is unambiguous intent.
         """
         if not layer_name:
             return []
-        pts = self.capzones.get(layer_name)
+        pts = self.custom_capzones.get(_norm(layer_name)) \
+            if self.custom_capzones else None
+        if pts is None:
+            pts = self.capzones.get(layer_name)
         return pts if isinstance(pts, list) else []
 
 

@@ -7,16 +7,41 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Modded and Steam Workshop maps can be given a minimap. The bundled map table
-  is built from sources that only know the stock layers, so a workshop map
-  recorded fine but played back over a bare grid. An optional
-  `data/static/custom_maps.json` now fills that in, keyed by map name rather
-  than layer name - one entry covers every RAAS/AAS/Invasion/Seed layer of a
-  mod, and the match ignores case, spaces and underscores because how the game
-  spells a modded layer is not knowable until it has run once. See the README
-  for the format and for where the two corner numbers come from.
+- The reader can run in its own container beside a Squad server you already
+  run, reading the game's memory across the container boundary. Getting there
+  by hand is a research project - the game process lives in another PID
+  namespace or on the host, `/proc/<pid>/maps` is gated by ptrace and
+  `/proc/<pid>/mem` by DAC on top of it, and AppArmor's `docker-default`
+  refuses ptrace toward anything not under the same profile. `docker compose
+  up -d` after `cp .env.example .env`; the stack never starts a game server,
+  and the two things it cannot guess - which process to attach to, and where
+  the install lives - are required rather than defaulted, so a wrong guess
+  cannot quietly cost you half the kill feed.
+- The container prunes its own recordings on the same policy as the systemd
+  timer in `deploy/`. Recordings grow by hundreds of MB a day, nothing else
+  deletes them, and on a box that also runs the game a full disk takes Squad
+  down with it - so the valve sits next to the thing that opens it rather than
+  in a second container somebody forgets to start.
+- An optional reverse proxy in front of the replay UI, with the certificate
+  handled for you. `docker compose -f docker-compose.yml -f
+  docker-compose.proxy.yml up -d` adds a Caddy container that obtains and
+  renews a Let's Encrypt certificate on its own - no certbot sidecar, no
+  renewal timer, nothing to schedule. It lives in its own compose file because
+  a reverse proxy is the one piece of a deployment somebody usually already
+  has; without the second `-f` nothing about the stack changes. `SQREADER_SITE`
+  picks the mode by its shape - a hostname turns on automatic HTTPS and the
+  HTTP->HTTPS redirect, a bare `:80` turns ACME off entirely for a host where
+  TLS is terminated elsewhere. `LETSENCRYPT_EMAIL`, `PROXY_HTTP_PORT` and
+  `PROXY_HTTPS_PORT` cover the account e-mail and a host that already owns
+  80/443.
 
 ### Fixed
+- The replay loading bar ran far past 100%. Its denominator was `ticks`, which
+  counts full frames only, while the numerator counts every snapshot the
+  reconstructor emits - and a 4 Hz position frame yields one too. The sidecar
+  has carried the right field all along (`totalFrames`, documented in
+  RecordingMeta as the loader's denominator); only the call site was never
+  moved over.
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's
   decoder had no branch for them at all, so each one came back as a copy of the
@@ -40,6 +65,10 @@ follows [Semantic Versioning](https://semver.org/).
 - Replay decoding in the browser is about twice as fast: guarding every field
   against one awkward key cost more than half the time, and only that key
   needs it.
+- The Google Analytics tag inherited from upstream is gone, so the web UI no
+  longer contacts Google - which is what PRIVACY.md already promised. A test
+  checks that `frontend/dist/index.html` ships no inline script, so adding one
+  fails the test instead of being silently blocked by the CSP.
 
 ## [1.4.8] - 2026-09-11
 

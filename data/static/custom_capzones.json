@@ -1,5 +1,5 @@
 {
- "SU Hrodna Border AAS v1": [
+ "Hrodna Border AAS v1": [
   {
    "name": "Highway Homesteads",
    "cluster": "A1",
@@ -1235,7 +1235,7 @@
    ]
   }
  ],
- "SU Hrodna Border Invasion v1": [
+ "Hrodna Border Invasion v1": [
   {
    "name": "Kuznica Industrial Park",
    "cluster": "01",
@@ -1749,7 +1749,7 @@
    ]
   }
  ],
- "SU Hrodna Border Invasion v2": [
+ "Hrodna Border Invasion v2": [
   {
    "name": "Border Administration",
    "cluster": "01",
@@ -2231,7 +2231,7 @@
    ]
   }
  ],
- "SU Hrodna Border RAAS v1": [
+ "Hrodna Border RAAS v1": [
   {
    "name": "Kowale Hill",
    "cluster": "A1",
@@ -4615,7 +4615,7 @@
    ]
   }
  ],
- "SU Hrodna Border RAAS v2": [
+ "Hrodna Border RAAS v2": [
   {
    "name": "Creek Homesteads",
    "cluster": "A1",
@@ -6601,7 +6601,7 @@
    ]
   }
  ],
- "SU Hrodna Border Seed v1": [
+ "Hrodna Border Seed v1": [
   {
    "name": "Truck Customs",
    "cluster": "01",

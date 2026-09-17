@@ -350,7 +350,7 @@ hand-written), keyed by **layer** name, same shape as the generated file:
 
 ```json
 {
-  "SU Hrodna Border RAAS v2": [
+  "Hrodna Border RAAS v2": [
     {
       "name": "Kowale Hill",
       "cluster": "A1",
@@ -363,12 +363,13 @@ hand-written), keyed by **layer** name, same shape as the generated file:
 
 This one is keyed per layer, not per map: RAAS v1 and v2 are different flag
 sets, so each layer needs its own entry. Case, spaces and underscores are
-ignored — the spelling in a layer dump (`SU_Hrodna_Border_RAAS_v2`) matches what
-the game reports — but unlike the map keys above, the key is the WHOLE layer
-name: a community tag in front of it is not tolerated here. An entry wins over
-the generated table. If you have the mod's layer dump in SquadCalc's
-`/api/get/layer` shape, `extract_capzone_data` in `sqreader/squad/capzones.py`
-turns it into exactly this list.
+ignored, but unlike the map keys above the key is the WHOLE layer name — a tag
+in front of it is not tolerated. Take that name from `gameState.mapName` in a
+recording, not from a layer dump: SquadCalc prefixes a modded layer with its mod
+tag (`SU Hrodna Border RAAS v2`) and the game reports it without
+(`Hrodna Border RAAS v2`). An entry wins over the generated table. If you have
+the mod's layer dump in SquadCalc's `/api/get/layer` shape, `extract_capzone_data`
+in `sqreader/squad/capzones.py` turns it into exactly this list.
 
 Known gaps:
 

@@ -22,13 +22,23 @@ export function teamColor(t: number | null | undefined): string {
   return "#9aa7b8";
 }
 
-// Best display name for a cap zone: SquadCalc's readable name only ("Niva
-// Lower", "Train Station") — no live lane-letter prefix. Without a static match
-// we fall back to the live name, stripping any UE class suffix AND the lane
-// prefix ("E1-TrainStation" → "TrainStation") so no "E1/E2" leader is shown.
+// Best display name for a cap zone: the flag text the game itself shows, then
+// SquadCalc's readable name ("Niva Lower", "Train Station") — no live lane-
+// letter prefix — then the live actor name, stripped of any UE class suffix AND
+// the lane prefix ("E1-TrainStation" → "TrainStation") so no "E1/E2" leader is
+// shown.
+//
+// FlagName leads because it is the only name the game vouches for. The other
+// two come from the level's actor names, which a mod that was copied from
+// another map keeps: Hrodna Border AAS v2 has a zone the HUD calls "Border
+// Crossing" whose actor is still Narva's "04-NivaUpper_0", and SquadCalc
+// derives its readable name from that same actor, so it inherits the mistake.
+// InfoPanel already reads flagName first; this makes the map agree with it.
 export function capLabel(
-  cz: { name?: string | null; staticName?: string | null },
+  cz: { name?: string | null; flagName?: string | null;
+        staticName?: string | null },
 ): string {
+  if (cz.flagName) return cz.flagName;
   const stat = cz.staticName;
   if (stat) return stat;
   return (cz.name ?? "")

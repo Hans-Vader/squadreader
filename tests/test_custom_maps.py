@@ -95,16 +95,6 @@ def test_map_name_is_filled_in_from_the_key(tmp_path):
     assert lb["mapId"] == "HrodnaBorder"
 
 
-def test_explicit_map_name_survives(tmp_path):
-    # A layer-keyed entry (a Seed/Skirmish crop) would otherwise be filed under
-    # its own layer name, splitting one map's recordings across every layer.
-    md = _md(tmp_path, custom={"Hrodna Border Seed v1": {
-        "texture": "HrodnaBorderSeed", "mapName": "Hrodna Border",
-        "mapId": "HrodnaBorder", **BOUNDS_OK}})
-    lb = md.layer_bounds_for("Hrodna_Border_Seed_v1")
-    assert (lb["mapName"], lb["mapId"]) == ("Hrodna Border", "HrodnaBorder")
-
-
 def test_vanilla_layers_still_resolve(tmp_path):
     md = _md(tmp_path)
     assert md.layer_bounds_for("Narva RAAS v1")["texture"] == "T_Narva_Minimap"

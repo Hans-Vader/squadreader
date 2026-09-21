@@ -82,7 +82,7 @@ export function Home() {
       <div className="hm-wrap">
         <header className="hm-bar">
           <div className="hm-brand">
-            <img src={logoUrl} alt="" width={26} height={26} />
+            <img src={logoUrl} alt="" width={38} height={38} />
             <span className="hm-word">Dach Community Night</span>
           </div>
           <nav className="hm-nav">

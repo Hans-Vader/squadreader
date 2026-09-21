@@ -16,6 +16,7 @@ export function TopBar() {
   const toggleScoreboard = useViewerStore((s) => s.toggleScoreboard);
   const mode = useViewerStore((s) => s.mode);
   const replayId = useViewerStore((s) => s.replay.id);
+  const setMode = useViewerStore((s) => s.setMode);
   const timelineVisible = useViewerStore((s) => s.timelineVisible);
   const toggleTimeline = useViewerStore((s) => s.toggleTimeline);
 
@@ -73,20 +74,17 @@ export function TopBar() {
     dlg?.showModal();
   };
 
-  // Exit the replay back to where the viewer was opened from. Deep-links (from
-  // /stats, /servers, the homepage — same or new tab) carry a same-origin
-  // referrer, so return there; a direct/bookmarked replay has none → site home.
+  // Exit the replay to the landing page. Here that page is a view of this
+  // same app, so flip the store instead of navigating: no reload, the picker
+  // and stats dialogs stay mounted, and useReplayLoader drops the frames on
+  // its own once mode leaves "replay". Inverse of Home's playRecording, down
+  // to clearing the params it wrote.
   const goBack = () => {
-    const ref = document.referrer;
-    try {
-      const u = ref ? new URL(ref) : null;
-      if (u && u.origin === window.location.origin
-          && !u.pathname.startsWith("/replay")) {
-        window.location.href = ref;
-        return;
-      }
-    } catch { /* malformed referrer → fall through to home */ }
-    window.location.href = "/";
+    setMode("home");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("mode");
+    url.searchParams.delete("id");
+    window.history.replaceState(null, "", url.toString());
   };
 
   return (
@@ -119,11 +117,10 @@ export function TopBar() {
         </div>
       </div>
       <div id="controls">
-        {/* Exit-replay: return to the page the replay was opened from (site
-            home as a fallback). Shown only while watching a recording. */}
+        {/* Exit-replay: back to the landing page. Only while watching. */}
         {mode === "replay" && (
           <button className="tb-back" onClick={goBack}
-                  title="back to previous page / site">← Back</button>
+                  title="back to the landing page">← Back</button>
         )}
         <button onClick={openPicker} title="watch past matches">
           Past Matches

@@ -35,7 +35,7 @@ agent and played back by the viewer in `frontend/`.
 - **Python ≥ 3.10.**
 - Permission to read the game process's memory: run as **root**, or grant the Python process `CAP_SYS_PTRACE` (and `CAP_DAC_READ_SEARCH`).
 - A running **Squad dedicated server** on the same host. Offsets are reverse-engineered for Squad **v10.4 / SDK v10.4.1**.
-- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node. Without Node, build it in a container instead (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node.
 
 ## How a match is recorded
 
@@ -116,17 +116,27 @@ PID namespace when its init exits, the reader included, with no chance to run
 `apparmor=unconfined` + `SYS_PTRACE` + running as uid 0 (not user-namespaced)
 lets the container ptrace *any* host process, not just the game — that is read
 access to all host process memory and, via `PTRACE_ATTACH`, a container-escape
-primitive. [The reader is still read-only](docs/docker-capabilities.md)
-describes what the reader's own code does, not the authority the container
-holds. Choose host mode only on a host you already trust at root level;
-container mode stays bounded to the peer container, since `docker-default`'s
-ptrace confinement still applies there.
+primitive. "The reader is still read-only" (below) describes what the reader's
+own code does, not the authority the container holds. Choose host mode only on a
+host you already trust at root level; container mode stays bounded to the peer
+container, since `docker-default`'s ptrace confinement still applies there.
 
 ### Why the reader is privileged
 
-Two capabilities (`SYS_PTRACE`, `DAC_READ_SEARCH`), nothing else, and read-only.
-Why both are needed, and why bundling the reader into the Squad image doesn't
-avoid it: [docs/docker-capabilities.md](docs/docker-capabilities.md).
+`cap_drop: [ALL]` plus exactly two capabilities:
+
+- `SYS_PTRACE` — `/proc/<pid>/maps` is mode 0444 but gated by the ptrace check;
+- `DAC_READ_SEARCH` — `/proc/<pid>/mem` is mode 0600 and owned by the game's
+  user, so the DAC check applies on top.
+
+Both are needed. Docker's default capability set appears to work with only
+`SYS_PTRACE`, but only because it still carries `DAC_OVERRIDE`. The reader is
+still read-only: it never opens the game's memory for writing.
+
+Installing the reader *into* the Squad image does not avoid this. It would be a
+sibling of the game process rather than an ancestor, and `ptrace_scope=1` grants
+attach to ancestors only — the same capability, plus a forked image and two
+lifecycles behind one PID 1.
 
 ### What is mounted
 
@@ -261,6 +271,17 @@ pulling the repo and running `docker compose build && docker compose up -d`
 (`build` alone leaves the old container running). Central push stays off;
 it needs `sqreader enroll` and the `push` extra (`pip install .[push]`).
 
+### Testing this setup
+
+The tests for the entrypoint and the compose files live in `docker/tests/`,
+outside the normal suite: they shell out to a real daemon, so a plain
+`pytest` neither runs nor collects them. After touching anything under
+`docker/` or a compose file, run them yourself:
+
+```bash
+python -m pytest docker/tests
+```
+
 ## Configuration
 
 Copy `sqreader.config.example.json` to `sqreader.config.json` (gitignored) and
@@ -277,56 +298,6 @@ built-in default**, so every value can also be passed on the command line.
 Output directories are `serve`/`record` flags (`--recordings-dir`, `--stats-db`,
 `--icons-dir`, `--sqmaps-dir`, `--frontend-dir`) and default next to the repo.
 Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
-
-### Modded / Steam Workshop maps
-
-The bundled map table covers the stock layers. A workshop map is not in it, so
-the recorder attaches no layer to its frames and the viewer draws a bare grid —
-everything else (players, vehicles, markers, kill feed, stats) works as normal.
-
-To give a modded map its minimap, add it to `data/static/custom_maps.json`
-(create it; it is optional and loaded only if present):
-
-```json
-{
-  "Hrodna Border": {
-    "texture":     "HrodnaBorder",
-    "topLeft":     { "x": -200000, "y": -200000 },
-    "bottomRight": { "x":  200000, "y":  200000 }
-  }
-}
-```
-
-Then drop the minimap image next to the stock ones as
-`sqmaps/HrodnaBorder.webp` (`.png`, `.jpg` also work).
-
-- **The key is the MAP name, not the layer name** — one entry covers every
-  RAAS/AAS/Invasion/Seed layer of that mod. Matching ignores case, spaces and
-  underscores and tolerates a community tag in front, so `Hrodna Border` finds
-  both `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more
-  specific key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys
-  under three characters are ignored so a typo cannot swallow unrelated maps.
-- **`texture` is the filename without extension** and must match
-  `[A-Za-z0-9_-]+` — no spaces.
-- **`topLeft`/`bottomRight` are the minimap's world corners in centimetres.**
-  The SDK requires them to form a square. Ask the mod author for the exact
-  values; failing that, a centred square of the advertised map size is a good
-  first guess (4 km → `±200000`), then check a replay and adjust.
-
-An entry that is missing its corners, or whose `texture` the server would
-refuse, is dropped with a warning at startup rather than used — a half-written
-entry hides the map the viewer would otherwise have guessed. Changes are read at
-startup, so restart the reader. In Docker both files are baked into the image
-(`COPY . /app`) — rebuild after adding a map.
-
-Known gaps:
-
-- **RAAS capture zones stay unrendered on modded maps.** Their static geometry
-  comes from SquadCalc, which does not carry workshop layers. AAS layers are
-  unaffected — there the live capture zones carry their own positions.
-- **Overriding a stock layer** (by naming it exactly) replaces its extent but
-  not its capture-zone geometry, which stays in the stock layer's coordinates.
-  Expect the flags to sit wrong unless the new bounds match the old ones.
 
 ## What data it collects and where it writes
 
@@ -352,7 +323,6 @@ See [PRIVACY.md](PRIVACY.md) for what is stored, how long, and how to delete it.
 - **Squad-version-specific.** Memory offsets are reverse-engineered for Squad v10.4 / SDK v10.4.1. A Squad update can move them — `sqreader doctor` re-verifies every offset against the live binary and reports drift, and startup discovery self-heals the two anchor addresses; a larger layout change needs new offsets.
 - **Anti-cheat detectors have blind spots.** They flag only memory-verified signals (no guessing), so many cheat classes are simply not detectable this way.
 - **One game server per reader instance.**
-- **Modded maps need a hand-written entry.** Bounds and minimap for a workshop map cannot be derived from the game; see [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
 
 ## Legal
 

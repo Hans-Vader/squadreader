@@ -2645,11 +2645,11 @@ html, body, #root {
 #home .hm-tile:hover { border-color: var(--border-strong); }
 #home .hm-tile:focus-visible, #home .hm-p:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 
-/* Minimap thumbnail. Desaturated and dimmed so a wall of them stays calm and
-   the layer name on top keeps its contrast; brightens on hover. */
+/* Minimap thumbnail, in its own colours. Only slightly dimmed, so the wall of
+   them still sits back behind the gray chrome; full brightness on hover. */
 #home .hm-th { display: block; position: relative; aspect-ratio: 16 / 9; background: #0d0c0c; overflow: hidden; }
-#home .hm-th img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.05) brightness(0.62); transition: filter 200ms, transform 500ms; }
-#home .hm-tile:hover .hm-th img { filter: grayscale(1) contrast(1.05) brightness(0.78); transform: scale(1.03); }
+#home .hm-th img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.9); transition: filter 200ms, transform 500ms; }
+#home .hm-tile:hover .hm-th img { filter: brightness(1); transform: scale(1.03); }
 #home .hm-th-ov { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(18,17,16,0.95) 8%, rgba(18,17,16,0.15) 60%); }
 #home .hm-th-mode { position: absolute; left: 12px; top: 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 #home .hm-th-name { position: absolute; left: 12px; right: 12px; bottom: 9px; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

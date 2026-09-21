@@ -2594,56 +2594,88 @@ html, body, #root {
 .stat .stat-k { font-size: 11px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 0.04em; }
 .stat .stat-v { font-size: 20px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
 
-/* ===== Home / landing (command panel) ================================== */
-#home { position: absolute; inset: 0; overflow-y: auto; background: var(--bg); }
-#home .hm-wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 48px; }
-#home .hm-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-#home .hm-brand { display: flex; align-items: center; gap: 10px; }
-#home .hm-logo { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
-#home .hm-beta { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
-#home .hm-nav { display: flex; gap: 8px; }
-
-#home .hm-hero { padding: 30px; margin-bottom: 20px; }
-#home .hm-status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
-#home .hm-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
-#home .hm-status.is-live { color: var(--good); }
-#home .hm-status.is-live .hm-status-dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); animation: hm-pulse 2s infinite; }
-#home .hm-status.is-on .hm-status-dot { background: var(--accent); }
-@keyframes hm-pulse { 50% { opacity: 0.45; } }
-#home .hm-hero-title { margin: 11px 0 6px; font-size: 32px; font-weight: 750; letter-spacing: -0.02em; color: var(--ink); }
-#home .hm-hero-sub { margin: 0 0 22px; font-size: 14px; color: var(--ink-mute); max-width: 640px; line-height: 1.5; }
-#home .hm-cta { display: flex; gap: 10px; flex-wrap: wrap; }
-
-#home .hm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-#home .hm-panel { padding: 0; overflow: hidden; }
-#home .hm-panel-h { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--border); }
-#home .hm-panel-h h2 { margin: 0; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-mute); }
-#home .hm-more { padding: 3px 9px; font-size: 11px; }
-#home .hm-list { display: flex; flex-direction: column; }
-#home .hm-empty { padding: 22px 16px; color: var(--ink-faint); font-size: 13px; text-align: center; }
-
-#home .hm-match, #home .hm-player {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 11px 16px; background: transparent; border: none;
-  border-bottom: 1px solid var(--border); cursor: pointer;
-  color: var(--ink); font: inherit; text-align: left; transition: background 100ms;
+/* ===== Home / landing (DCN selection page) =============================
+   Monochrome surface sampled from the DCN badge: #1a1917 charcoal,
+   #e0dfdb off-white. The palette is redefined ON #home, so every shared
+   primitive (.btn/.card/.chip) repaints itself here without a per-rule
+   override — and the replay viewer outside keeps the indigo accent and
+   the frozen canvas/team tokens untouched. */
+#home {
+  position: absolute; inset: 0; overflow-y: auto;
+  --bg:        #121110;
+  --surface-1: #1a1917;
+  --surface-2: #222120;
+  --surface-3: #2b2a27;
+  --border:        #2a2926;
+  --border-strong: #3a3834;
+  --ink:       #e2e0db;
+  --ink-mute:  #9b978f;
+  --ink-faint: #8a877f;   /* 4.9:1 on --surface-1 — all the small meta text uses it */
+  --accent:      var(--ink);
+  --on-accent:   #141312;
+  --accent-weak: rgba(226,224,219,0.06);
+  --accent-ring: rgba(226,224,219,0.28);
+  background: var(--bg); color: var(--ink);
 }
-#home .hm-match:last-child, #home .hm-player:last-child { border-bottom: none; }
-#home .hm-match:hover, #home .hm-player:hover { background: var(--accent-weak); }
-#home .hm-match-map { flex: 1; font-weight: 550; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#home .hm-match-meta { display: flex; align-items: center; gap: 8px; flex: none; }
-#home .hm-match-dim { font-size: 11px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
-#home .hm-match-go { font-size: 12px; color: var(--accent); font-weight: 600; flex: none; }
+#home .btn-primary:hover { background: #ffffff; }
+#home .hm-wrap { max-width: 1120px; margin: 0 auto; padding: 20px 24px 56px; }
 
-#home .hm-rank { width: 20px; font-size: 12px; font-weight: 700; color: var(--ink-faint); font-variant-numeric: tabular-nums; flex: none; }
-#home .hm-pname { flex: 1; font-weight: 550; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#home .hm-clan { color: var(--ink-mute); margin-right: 5px; }
-#home .hm-pval { font-size: 13px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; flex: none; }
-#home .hm-pval-k { font-size: 10px; color: var(--ink-mute); font-weight: 500; }
+#home .hm-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+#home .hm-brand { display: flex; align-items: center; gap: 11px; }
+#home .hm-brand img { display: block; opacity: 0.95; }
+#home .hm-word { font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+#home .hm-nav { display: flex; align-items: center; gap: 14px; }
 
-#home .hm-foot { margin-top: 30px; text-align: center; font-size: 12px; color: var(--ink-faint); }
+#home .hm-status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--ink-mute); }
+#home .hm-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+#home .hm-status.is-on .hm-status-dot { background: var(--ink); }
 
-@media (max-width: 720px) { #home .hm-cols { grid-template-columns: 1fr; } }
+#home .hm-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+#home .hm-sect-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+#home .hm-empty { grid-column: 1 / -1; padding: 30px; text-align: center; color: var(--ink-faint); font-size: 13px; }
+
+#home .hm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+#home .hm-tile, #home .hm-p {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; padding: 0;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+#home .hm-tile { transition: border-color 140ms; }
+#home .hm-tile:hover { border-color: var(--border-strong); }
+#home .hm-tile:focus-visible, #home .hm-p:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* Minimap thumbnail. Desaturated and dimmed so a wall of them stays calm and
+   the layer name on top keeps its contrast; brightens on hover. */
+#home .hm-th { display: block; position: relative; aspect-ratio: 16 / 9; background: #0d0c0c; overflow: hidden; }
+#home .hm-th img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.05) brightness(0.62); transition: filter 200ms, transform 500ms; }
+#home .hm-tile:hover .hm-th img { filter: grayscale(1) contrast(1.05) brightness(0.78); transform: scale(1.03); }
+#home .hm-th-ov { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(18,17,16,0.95) 8%, rgba(18,17,16,0.15) 60%); }
+#home .hm-th-mode { position: absolute; left: 12px; top: 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+#home .hm-th-name { position: absolute; left: 12px; right: 12px; bottom: 9px; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#home .hm-meta { display: flex; align-items: center; gap: 10px; padding: 10px 12px; color: var(--ink-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+#home .hm-meta-sp { flex: 1; }
+
+#home .hm-strip { margin-top: 34px; border-top: 1px solid var(--border); padding-top: 18px; }
+#home .hm-players { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+#home .hm-p { padding: 11px 12px; }
+#home .hm-p:hover { background: var(--surface-2); }
+#home .hm-pname { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#home .hm-clan { color: var(--ink-faint); margin-right: 5px; }
+#home .hm-pval { display: block; margin-top: 3px; font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#home .hm-pval-k { font-size: 10px; color: var(--ink-faint); font-weight: 400; }
+#home .hm-foot { margin-top: 34px; text-align: center; font-size: 11px; color: var(--ink-faint); }
+#home .hm-foot a { color: inherit; }
+#home .hm-foot a:hover { color: var(--ink); }
+
+@media (max-width: 900px) {
+  #home .hm-grid { grid-template-columns: repeat(2, 1fr); }
+  #home .hm-players { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 620px) {
+  #home .hm-grid, #home .hm-players { grid-template-columns: 1fr; }
+  #home .hm-bar { flex-wrap: wrap; }
+}
 
 /* ===== Ticket Timeline overlay (replay-only) ========================= */
 #tt-overlay {

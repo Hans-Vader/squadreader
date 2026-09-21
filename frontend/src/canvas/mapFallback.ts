@@ -14,6 +14,7 @@
 // individual words longest-first, because a clan tag is nearly always shorter
 // than a map name.
 import { MAP_FALLBACKS, type FallbackMap } from "./mapFallbackData";
+import { CUSTOM_MAPS } from "./mapCustomData";
 
 const cache = new Map<string, FallbackMap | null>();
 
@@ -25,6 +26,9 @@ function norm(s: string): string {
 const BY_NORM: Map<string, FallbackMap> = (() => {
   const m = new Map<string, FallbackMap>();
   for (const [id, v] of MAP_FALLBACKS) m.set(norm(id), v);
+  // Modded maps last: custom_maps.json is the operator's own declaration, so
+  // it wins over the generated stock table on a name that is in both.
+  for (const [id, v] of CUSTOM_MAPS) m.set(norm(id), v);
   return m;
 })();
 
@@ -43,7 +47,11 @@ export function fallbackMap(mapName: string | null | undefined): FallbackMap | n
   const hit = cache.get(mapName);
   if (hit !== undefined) return hit;
 
-  const cleaned = mapName.replace(DECORATION, " ");
+  // Underscores are separators, not letters: the game spells a layer
+  // `Hrodna_Border_RAAS_v1` as readily as `Hrodna Border RAAS v1`, and
+  // `\b` does not see a boundary inside `Border_Invasion` because `_` is
+  // a word character — so DECORATION would never strip it.
+  const cleaned = mapName.replace(/_/g, " ").replace(DECORATION, " ");
   let found: FallbackMap | null = BY_NORM.get(norm(cleaned))
     ?? BY_NORM.get(norm(mapName))
     ?? null;

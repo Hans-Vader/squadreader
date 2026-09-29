@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useViewerStore } from "../state/viewerStore";
 import { ClipRecorder } from "./ClipRecorder";
 import { SettingsMenu } from "./SettingsMenu";
+import { LiveControls } from "../live/LiveAccess";
 
 export function TopBar() {
   const status = useViewerStore((s) => s.status);
@@ -137,6 +138,7 @@ export function TopBar() {
                   onClick={() => toggleTimeline()}
                   title="ticket-loss timeline (G)">Tickets</button>
         )}
+        <LiveControls />
         <ClipRecorder />
         <SettingsMenu />
       </div>

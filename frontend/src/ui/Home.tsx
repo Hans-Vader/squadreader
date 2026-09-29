@@ -7,6 +7,7 @@ import { useViewerStore } from "../state/viewerStore";
 import { listRecordings } from "../api/recordings";
 import { fetchLeaderboard } from "../api/playerStats";
 import type { RecordingMeta, LeaderRow } from "../state/types";
+import { LiveEntry } from "../live/LiveAccess";
 
 function fmtDate(s: string | null): string {
   if (!s) return "—";
@@ -61,6 +62,7 @@ export function Home() {
             <span className="chip hm-beta">BETA</span>
           </div>
           <nav className="hm-nav">
+            <LiveEntry />
             <button className="btn btn-ghost" onClick={() => showModal("player-stats")}>Stats</button>
             <button className="btn btn-ghost" onClick={() => showModal("recording-picker")}>Recordings</button>
           </nav>

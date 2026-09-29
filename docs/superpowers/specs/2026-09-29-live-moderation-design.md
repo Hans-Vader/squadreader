@@ -169,7 +169,7 @@ Geprüft wird mit `hmac.compare_digest(sha256(eingabe.encode("utf-8", "surrogate
 - **Laufzeit:** 12 h absolut, ohne Verlängerung. Abgelaufene Einträge werden bei jedem Login entfernt.
 - **Anzahl:** höchstens 32 Sitzungen. Kommt eine weitere hinzu, wird die älteste verdrängt.
 - **Neustart:** Ein Neustart des Readers löscht alle Sitzungen.
-- **Cookies lesen:** Alle `Cookie`-Header werden ausgewertet (`get_all("Cookie")`) und darin alle `sqr_live`-Werte. Der erste gültige Wert zählt.
+- **Cookies lesen:** Alle `Cookie`-Header werden ausgewertet (`get_all("Cookie")`) und darin die ersten 8 `sqr_live`-Werte (`MAX_COOKIE_VALUES`). Die Grenze verhindert, dass ein Header voller Duplikate für jeden Wert eine Sperre und eine Abfrage kostet. Der erste gültige Wert zählt.
 
 Cookie beim Login:
 `sqr_live=<token>; Max-Age=43200; HttpOnly; Secure; SameSite=Strict`
@@ -206,6 +206,8 @@ Hinter Traefik, Caddy oder nginx ist dieser Eintrag die echte Client-IP. Bei dir
 
 - **Registrierung:** `cmd_serve` registriert den Handler nur, wenn Live aktiv ist.
 - **Keine Sperren im Signal-Kontext:** Der Handler startet nur einen kurzen Thread (`sqreader-live-reload`), der die eigentliche Arbeit macht.
+  - **Ausnahme, wenn kein Thread startet:** Wirft `Thread.start()`, widerruft der Handler selbst (`reset(None)` und `kick()`, ohne Log). So läuft keine Exception in die Tick-Schleife des Readers.
+  - Das ist im Signal-Kontext sicher, weil der Haupt-Thread `Access._lock` nie hält und die Condition des Hubs re-entrant ist.
 - **Was der Thread tut:**
   1. `live_password` direkt aus der Config-Datei lesen: `$SQREADER_CONFIG`, sonst `./sqreader.config.json`, genau wie `config._load`. Der globale Config-Cache bleibt dabei unberührt.
   2. Den Wert nach Abschnitt 4 prüfen.
@@ -214,11 +216,17 @@ Hinter Traefik, Caddy oder nginx ist dieser Eintrag die echte Client-IP. Bei dir
   5. Den Hub wecken. Dadurch enden alle Streams sofort.
 - **Fehlerfall:** Ist die Datei unlesbar, das JSON kaputt oder der Wert ungültig, ist kein gültiges Passwort mehr geladen.
   - Dann scheitert jeder Login mit 401, bis die Datei korrigiert und erneut SIGHUP gesendet ist.
-  - Log: WARNING `live: SIGHUP: all sessions revoked; NO valid live_password in <pfad>, logins disabled until fixed`.
-- **Erfolgsfall:** WARNING `live: SIGHUP: all sessions revoked, password reloaded`.
+  - Log: WARNING `live: SIGHUP: all sessions revoked; NO valid live_password in <pfad> (<grund>), logins disabled until fixed`.
+  - `<grund>` bei einem Lesefehler ist nur der Typname der Exception, etwa `FileNotFoundError` oder `JSONDecodeError`. Meldungstext und Dateiinhalt stehen nie im Log, denn beides kann das Passwort zitieren.
+  - `<grund>` bei einem gelesenen, aber abgelehnten Wert ist die Regel aus Abschnitt 4 ohne das Präfix `live map disabled: `. Bei einem fehlenden Wert, auch bei JSON, das kein Objekt ist, steht `live_password is not set`.
+  - Ließ sich der Pfad nicht auflösen, etwa weil das Arbeitsverzeichnis gelöscht wurde, steht `None` statt `<pfad>`. Die Sitzungen sind trotzdem weg.
+- **Erfolgsfall:** WARNING. Der Text hängt davon ab, ob sich das Passwort geändert hat; `Access.reset()` gibt zurück, ob der gespeicherte Digest ein anderer wurde, und `None` zählt dabei als Wert.
+  - anderer Digest: `live: SIGHUP: all sessions revoked, password reloaded`
+  - gleicher Digest: `live: SIGHUP: all sessions revoked; live_password in <pfad> is UNCHANGED`
+  - Die Zeile UNCHANGED deckt den Docker-Fall auf: Ersetzt ein Editor die Datei, liest der Container über den Single-File-Bind-Mount weiter die alte Inode, und das Log würde sonst „reloaded“ melden, obwohl noch das alte Passwort gilt.
 - **Fehlversuche:** Die Zählung der Fehlversuche bleibt erhalten.
-- **Aufruf:** `docker compose kill -s HUP sqreader` bzw. `systemctl kill -s HUP <unit>`.
-- **Ohne Live:** Es gibt keinen Handler, SIGHUP beendet den Prozess wie heute. Wer Live nachträglich einschaltet, muss neu starten.
+- **Aufruf:** `docker compose kill -s HUP sqreader` bzw. `systemctl kill -s HUP --kill-whom=main <unit>`. Ohne `--kill-whom=main` bekommt auch der Build-Worker der Zwei-Ebenen-Aufnahme das Signal.
+- **Ohne Live:** Es gibt keinen Handler. Unter systemd oder im Terminal beendet SIGHUP den Prozess wie heute; als PID 1 eines Containers ignoriert der Kernel das Signal. Wer Live nachträglich einschaltet, muss neu starten.
 
 ## 8. Live-Stream
 
@@ -284,6 +292,7 @@ Das sind Modul-Konstanten in `live.py`. Tests dürfen sie per Monkeypatch verkle
 | `RETRY_MS` | 3000 |
 | `WRITE_TIMEOUT_SEC` | 20 |
 | `REFUSED_LOG_INTERVAL_SEC` | 60 |
+| `MAX_COOKIE_VALUES` | 8 |
 
 ## 9. Eingriffe in bestehende Dateien
 
@@ -474,7 +483,7 @@ So werden die Tests aufgebaut:
    - Ablauf (mit gepatchter Uhr)
    - die Grenze von 32, bei der die älteste wegfällt
    - ein neues Token pro Login
-   - bei doppeltem Cookie zählt der erste gültige Wert
+   - bei doppeltem Cookie zählt der erste gültige Wert, gelesen werden aber höchstens die ersten 8
 8. **CORS und Caching:** Mit `cors_origin="*"` fehlt `Access-Control-Allow-Origin` auf `/api/live/*`, und überall steht `no-store`.
 9. **Stream:**
    - 401 ohne Sitzung oder mit ungültiger Sitzung, ohne dass ein Platz belegt wird
@@ -489,6 +498,8 @@ So werden die Tests aufgebaut:
 13. **SIGHUP-Reload:**
     - Das neue Passwort gilt, alte Sitzungen sind ungültig.
     - Bei unlesbarer Datei oder ungültigem Wert ist kein Login möglich.
+    - Das Log nennt den Grund eines Fehlschlags, nur als Typname oder Regel und nie mit Meldungstext oder Inhalt, und meldet `UNCHANGED`, wenn die Datei noch das alte Passwort enthält.
+    - Kann kein Thread starten, widerruft der Handler selbst und wirft nichts.
 14. **Gates mit aktivem Live unverändert:** Eine aktive Aufnahme liefert 404, und die laufende Runde ist in `/api/matches` unsichtbar.
 
 `tests/test_public_no_live.py` und `tests/test_http_versions.py` bleiben unverändert.
@@ -535,6 +546,7 @@ Außerdem wird `retryAfterMinutes` getestet.
   - Caddy: `/api/live/*` vom `encode` ausnehmen.
   - nginx: nichts nötig.
 - **Hostname:** ein Hostname pro Instanz, denn Cookies unterscheiden keine Ports. Die Live-Karte gehört nicht als Pfad auf eine Origin mit fremden Apps.
+- **Wenn Logins blockiert sind:** die Logzeilen der beiden Grenzen, dass laufende Streams weiterlaufen, und die IP-Allowlist am Proxy als Ausweg (Traefik-Labels, Caddy, nginx). Dazu, dass die Bremse auf den rechten `X-Forwarded-For`-Eintrag schaut und hinter einem CDN nur die Allowlist hilft.
 - **Logs:** welche Logzeilen es gibt und was sie bedeuten; dazu die Prüfung mit `curl -N`.
 
 ## 15. Auslieferung

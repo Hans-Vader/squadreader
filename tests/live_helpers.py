@@ -129,9 +129,15 @@ class Stream:
         return self._until(b"\n\n", timeout)
 
     def closed_within(self, seconds):
-        self.s.settimeout(seconds)
+        # `seconds` is a TOTAL deadline, not a per-recv timeout: a stream that keeps
+        # sending keepalives must still come back False, not block the test forever.
+        deadline = time.monotonic() + seconds
         try:
             while True:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return False
+                self.s.settimeout(left)           # never 0: that is non-blocking mode
                 chunk = self.s.recv(65536)
                 if not chunk:
                     return True

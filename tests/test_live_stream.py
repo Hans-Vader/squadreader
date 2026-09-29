@@ -1,6 +1,7 @@
 """The moderator live stream (Server-Sent Events) end to end over a real socket."""
 from __future__ import annotations
 
+import http.client
 import json
 import time
 
@@ -62,6 +63,27 @@ def test_frames_arrive_in_order_as_they_are_published():
             for line, is_full in ((full(1), True), (pos(2), False), (full(3), True)):
                 lm.publish(line, full=is_full)
                 assert st.event() == event(line)
+        finally:
+            st.close()
+
+
+def test_a_batch_keeps_every_full_frame_and_only_the_newest_position():
+    lm = live.LiveMap(PW)
+    with running(lm) as port:
+        _, token, _ = login(port)
+        st, _ = _open(port, token)
+        try:
+            assert st.event() == b"retry: 3000\n\n"
+            # Holding the hub's lock keeps the stream thread asleep until all six frames
+            # are in, so it wakes to ONE batch. pick() must drop the superseded positions.
+            with lm.hub._cond:
+                for line, is_full in ((pos(1), False), (full(2), True), (pos(3), False),
+                                      (full(4), True), (pos(5), False), (pos(6), False)):
+                    lm.publish(line, full=is_full)
+            assert [st.event() for _ in range(3)] == [event(full(2)), event(full(4)),
+                                                      event(pos(6))]
+            lm.publish(pos(7), full=False)
+            assert st.event() == event(pos(7))      # nothing else was queued behind the batch
         finally:
             st.close()
 
@@ -148,13 +170,18 @@ def test_the_stream_limit_answers_503(monkeypatch):
         _, token, _ = login(port)
         s1, _ = _open(port, token)
         s2, _ = _open(port, token)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
         try:
-            st, hdrs, body = request(port, "GET", "/api/live/stream", headers=cookie(token))
-            assert (st, hdrs["Retry-After"]) == (503, "30")
-            assert json.loads(body) == {"error": "too many live viewers"}
+            conn.request("GET", "/api/live/stream", headers=cookie(token))
+            # Status before body: a stream that was wrongly let in never ends, and its
+            # keepalives would keep a read-to-EOF alive forever instead of failing here.
+            resp = conn.getresponse()
+            assert (resp.status, resp.getheader("Retry-After")) == (503, "30")
+            assert json.loads(resp.read()) == {"error": "too many live viewers"}
             s1.close()
             assert wait_for(lambda: lm.hub.subscribers == 1)
         finally:
+            conn.close()
             s1.close()
             s2.close()
 

@@ -9,6 +9,7 @@ import { fetchLeaderboard } from "../api/playerStats";
 import { fallbackMap } from "../canvas/mapFallback";
 import logoUrl from "../assets/dcn.png";
 import type { RecordingMeta, LeaderRow } from "../state/types";
+import { LiveEntry } from "../live/LiveAccess";
 
 // The backend serves the SPA at `/` and its build output under `/assets/` —
 // and 404s everything else (httpsrv.py's do_GET ladder). So the landing
@@ -90,6 +91,7 @@ export function Home() {
               <span className="hm-status-dot" />
               {online ? "Server online" : "Archiv"}
             </span>
+            <LiveEntry />
             <button className="btn btn-ghost" onClick={() => showModal("player-stats")}>Statistiken</button>
             <button className="btn btn-primary" onClick={() => showModal("recording-picker")}>Alle Aufzeichnungen</button>
           </nav>

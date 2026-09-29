@@ -32,7 +32,10 @@
 	# Content-Encoding is passed through untouched, so the zstd passthrough keeps
 	# spending zero CPU. zstd is listed first because it is preferred when the
 	# client offers both. `Vary: Accept-Encoding` is added automatically.
-	encode zstd gzip
+	# The moderator live map is a Server-Sent-Events stream: compressing it
+	# would hold events inside a compression frame (docs/live-map.md).
+	@compress not path /api/live/*
+	encode @compress zstd gzip
 
 	# Caddy adds neither of these on its own. `-Server` drops both Caddy's
 	# banner and the upstream's, which Caddy would otherwise append.
@@ -49,10 +52,10 @@
 	# pin outlives the certificate that justified it: while a cert is invalid
 	# — a lost caddy-data volume plus Let's Encrypt's weekly limit, or the
 	# staging CA above — a pinned browser has no "proceed anyway" to click,
-	# and the only way to lift a pin is max-age=0 over WORKING HTTPS. This
-	# site has no login and no cookies, so a year of that trade buys little.
-	# Raise it once renewals have been boring for a while; 31536000 if you
-	# intend to preload.
+	# and the only way to lift a pin is max-age=0 over WORKING HTTPS. The only
+	# login is the optional moderator live map (docs/live-map.md), so a year of
+	# that trade buys little. Raise it once renewals have been boring for a
+	# while; 31536000 if you intend to preload.
 	#
 	# Lifting a pin browsers already cached: deleting the header does nothing,
 	# serve max-age=0 over HTTPS until they re-visit:

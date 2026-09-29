@@ -28,6 +28,7 @@ import { useReplayPlayback } from "./api/playback";
 import { useKillFeed } from "./killfeed/useKillFeed";
 import { useReplayKillFeed } from "./killfeed/useReplayKillFeed";
 import { useViewerStore } from "./state/viewerStore";
+import { LiveAccess } from "./live/LiveAccess";
 
 export default function App() {
   const mode = useViewerStore((s) => s.mode);
@@ -194,6 +195,7 @@ export default function App() {
       <TicketTimeline />
       <RecordingPicker />
       {!statsRoute && <PlayerStats />}
+      {!statsRoute && <LiveAccess />}
     </div>
   );
 }

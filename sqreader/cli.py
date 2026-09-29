@@ -934,6 +934,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
             if (cand / "index.html").is_file():
                 frontend_dir = cand
                 break
+    # Fork-only moderator live map: None (absent) unless live_password is set.
+    from .live import live_from_config
+    live = live_from_config(config.get("live_password"))
     srv = serve_in_background(args.host, args.port, beat,
                               recordings_dir=recordings_dir,
                               icons_dir=icons_dir,
@@ -945,7 +948,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                               # slow cadence doesn't make /health twitchy.
                               stale_after_sec=max(30.0, 15.0 / args.hz),
                               cors_origin=args.cors_origin,
-                              stats_db=stats_db_path)
+                              stats_db=stats_db_path,
+                              live=live)
     period = 1.0 / args.hz
     feature_list = ["/health"]
     if recordings_dir:
@@ -1021,6 +1025,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         stop["flag"] = True
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
+    if live is not None:
+        signal.signal(signal.SIGHUP, live.on_sighup)
 
     tick = 0
     started = time.time()
@@ -1088,6 +1094,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 log_tailer.drain(), snap.get("players") or [])
         line = json.dumps(snap, ensure_ascii=False) + "\n"
         beat.mark()
+        if live is not None:
+            live.publish(line, full=True)
         if out_f:
             out_f.write(line)
             out_f.flush()
@@ -1161,6 +1169,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                         pos = sample_positions(pm, paths, entities, tick, ts)
                         pos_line = json.dumps(pos, ensure_ascii=False) + "\n"
                         beat.mark()
+                        if live is not None:
+                            live.publish(pos_line, full=False)
                         if out_f:
                             out_f.write(pos_line)
                             out_f.flush()

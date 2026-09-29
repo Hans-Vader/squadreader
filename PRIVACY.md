@@ -25,10 +25,14 @@ platform that you chose.
 | `recordings/*.sqrx` (+ `.meta.json`) | full per-tick match capture (positions, names) | until pruned by `deploy/cleanup_recordings.sh` (default 90 days) or manually |
 | `captures/*.ndjson` | ad-hoc snapshots you take | until you delete them |
 | `docker compose logs proxy` (optional Caddy proxy only) | replay-UI access log: client IP, **full request URI — which for some paths contains player identifiers** (below), user agent, timestamp | rotated by Docker, 5 × 10 MB (`docker-compose.proxy.yml`) |
+| `docker compose logs sqreader`, or the journal under systemd (only with `live_password` set) | moderator live map log ([docs/live-map.md](docs/live-map.md)): client IP (an IPv6 address cut to its /64) and time of logins, failed logins, logouts and live-map opens, closes and refusals; a short session id on each login | Docker's default: unrotated unless your Docker daemon sets a limit, deleted with the container; under systemd, the journal's own limits |
 
 The reader's own HTTP server keeps no access log (`_H.log_message` is a
-deliberate no-op). The proxy's exists because it is then the only place a
-request is ever recorded, which matters after an incident.
+deliberate no-op); only the optional moderator live map logs its own logins
+and streams (the `docker compose logs sqreader` row). The proxy's log exists
+because it is then the replay UI's only access log, which matters after an
+incident. The live map also holds client addresses in memory while it tracks
+sessions and failed logins; a restart clears that memory, not the log.
 
 **Read this before enabling the proxy.** Caddy's `log` directive records the
 request URI, and three of the reader's API paths carry player identifiers in
@@ -70,7 +74,7 @@ local stats DB already holds — the match summary + full scoreboard, per-player
 stats and ELO, kill events (including positions), and vehicle-usage sessions —
 and, unless you disable it (`push_replay: false`), the match's `.sqrx` replay.
 **The live real-time map is never pushed** — no positions of an in-progress
-match leave the box; only completed matches are sent.
+match reach the central platform; only completed matches are sent.
 
 **How it is sent:** each match is gzipped, encrypted with AES-256-GCM (a key
 derived from your per-host enrollment secret), and POSTed over HTTPS. A central

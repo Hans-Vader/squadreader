@@ -63,9 +63,11 @@
 	{$SQREADER_HSTS:header Strict-Transport-Security "max-age=2592000"}
 	header -Server
 
-	# JSON access log to stderr (`docker compose logs proxy`), the only request
-	# record in the stack: the Python server's per-request log is a deliberate
-	# no-op. Rotated by the `logging:` block in docker-compose.proxy.yml.
+	# JSON access log to stderr (`docker compose logs proxy`), the only full
+	# request record in the stack: the Python server's per-request log is a
+	# deliberate no-op, and the optional moderator live map logs only its own
+	# logins and streams (PRIVACY.md). Rotated by the `logging:` block in
+	# docker-compose.proxy.yml.
 	#
 	# It logs the request URI, and /api/players/<eosId>, /api/players?q=<name>
 	# and /api/match/<id> put player identifiers THERE — so this line, not the

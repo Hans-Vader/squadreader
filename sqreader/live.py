@@ -213,3 +213,99 @@ class Access:
         token = secrets.token_urlsafe(32)
         self._sessions[token] = (now + SESSION_TTL_SEC, client)
         return token
+
+
+class Hub:
+    """Hands the reader's frames to the stream threads.
+
+    publish() runs on the reader's main tick thread, the one that also writes
+    the recording. It encodes once, appends and notifies; it never touches a
+    socket and never raises, so no viewer can slow or break the recorder.
+    """
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition()
+        self._seq = 0
+        # (seq, is_full, payload), filled only while someone is watching
+        self._ring: deque[tuple[int, bool, bytes]] = deque(maxlen=RING_SIZE)
+        self._last_full: Optional[bytes] = None
+        self._subs = 0
+        self._wake = 0
+        self._closed = False
+        self._failed = False
+
+    def publish(self, line: str, *, full: bool) -> None:
+        try:
+            payload = b"data: " + line.rstrip("\n").encode("utf-8", "replace") + b"\n\n"
+            with self._cond:
+                self._seq += 1
+                if full:
+                    self._last_full = payload
+                if self._subs:
+                    self._ring.append((self._seq, full, payload))
+                self._cond.notify_all()
+        except Exception:
+            if not self._failed:
+                self._failed = True
+                log.exception("live: publish failed (logged once; the recording is unaffected)")
+
+    @property
+    def subscribers(self) -> int:
+        with self._cond:
+            return self._subs
+
+    def subscribe(self, limit: int) -> Optional[tuple[int, int, Optional[bytes]]]:
+        """Admit one stream unless `limit` are open: (cursor, wake, newest full frame)."""
+        with self._cond:
+            if self._closed or self._subs >= limit:
+                return None
+            self._subs += 1
+            return self._seq, self._wake, self._last_full
+
+    def unsubscribe(self) -> None:
+        with self._cond:
+            self._subs -= 1
+            if self._subs == 0:
+                self._ring.clear()
+
+    def wait(self, cursor: int, wake: int,
+             timeout: float) -> tuple[str, list[tuple[int, bool, bytes]], int, int]:
+        """Block for a new frame, a kick()/close(), or `timeout` seconds.
+
+        Returns (status, events, cursor, wake). status is 'ok', 'gap' (the ring
+        overtook this reader, so frames are missing) or 'closed'.
+        """
+        with self._cond:
+            self._cond.wait_for(
+                lambda: self._seq > cursor or self._wake != wake or self._closed,
+                timeout=timeout)
+            if self._closed:
+                return "closed", [], cursor, self._wake
+            events = [e for e in self._ring if e[0] > cursor]
+            if self._seq > cursor and (not events or events[0][0] != cursor + 1):
+                return "gap", [], cursor, self._wake
+            return "ok", events, (events[-1][0] if events else cursor), self._wake
+
+    def kick(self) -> None:
+        """Wake every stream so it re-checks its session now."""
+        with self._cond:
+            self._wake += 1
+            self._cond.notify_all()
+
+    def close(self) -> None:
+        with self._cond:
+            self._closed = True
+            self._cond.notify_all()
+
+
+def pick(events: list[tuple[int, bool, bytes]]) -> list[tuple[int, bool, bytes]]:
+    """What a reader that fell behind still needs.
+
+    Every full frame, because each one carries the kill events that the kill
+    feed attributes, plus the newest position frame after the last full one.
+    Older position frames are superseded.
+    """
+    fulls = [e for e in events if e[1]]
+    last_full = fulls[-1][0] if fulls else -1
+    tail = [e for e in events if not e[1] and e[0] > last_full]
+    return fulls + tail[-1:]

@@ -112,8 +112,14 @@ class Stream:
         self.buf = b""
 
     def _until(self, marker, timeout):
-        self.s.settimeout(timeout)
+        # `timeout` is a TOTAL deadline for the marker, not a per-recv timeout: a peer that
+        # keeps sending (keepalives) but never sends the marker must fail, not block forever.
+        deadline = time.monotonic() + timeout
         while marker not in self.buf:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError(self.buf)
+            self.s.settimeout(left)           # never 0: that is non-blocking mode
             chunk = self.s.recv(65536)
             if not chunk:
                 raise EOFError(self.buf)

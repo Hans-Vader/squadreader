@@ -68,6 +68,7 @@
     "It is a CREDENTIAL: chmod 600 this file.",
     "Moderators log in at https://<site>/?mode=live (HTTPS required).",
     "Change it or kick everyone out without a restart: edit it, then send SIGHUP.",
+    "Under Docker, edit this file IN PLACE (a replaced file is not seen); see docs/live-map.md.",
     "See docs/live-map.md."
   ],
   "live_password": null

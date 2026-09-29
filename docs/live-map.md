@@ -31,6 +31,13 @@ recording stays intact:
     docker compose kill -s HUP sqreader      # Docker
     systemctl kill -s HUP <unit>             # systemd
 
+Under Docker the config file is a single-file bind mount, and a bind mount
+follows the file's inode. Edit it in place, for example with `cat new.json >
+sqreader.config.json` or `tee`. `sed -i`, vim's default save and most editors
+replace the file instead; the container then keeps reading the old copy, and
+SIGHUP reloads the old password while logging that it reloaded it. After every
+change, check that the old password is refused.
+
 Every session ends at once and open live maps drop back to the login. If the
 file cannot be read or holds no valid password, **nobody** can log in until it
 is fixed and SIGHUP is sent again.

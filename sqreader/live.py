@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import json
 import logging
 import math
 import secrets
@@ -96,6 +97,17 @@ def client_key(headers: Any, peer: str) -> str:
             return str(ipaddress.IPv6Network((int(ip) >> 64 << 64, 64)))
         return str(ip)
     return "unknown"
+
+
+def cookie_values(headers: Any) -> list[str]:
+    """Every sqr_live value the browser sent, in order."""
+    values = []
+    for header in headers.get_all("Cookie") or []:
+        for part in header.split(";"):
+            name, sep, value = part.strip().partition("=")
+            if sep and name == COOKIE and value:
+                values.append(value)
+    return values
 
 
 class Access:
@@ -309,3 +321,130 @@ def pick(events: list[tuple[int, bool, bytes]]) -> list[tuple[int, bool, bytes]]
     last_full = fulls[-1][0] if fulls else -1
     tail = [e for e in events if not e[1] and e[0] > last_full]
     return fulls + tail[-1:]
+
+
+def _json(h: Any, code: int, obj: Any, extra: Optional[dict[str, str]] = None) -> None:
+    body = json.dumps(obj).encode("utf-8")
+    try:
+        h.send_response(code)
+        h.send_header("Content-Type", "application/json")
+        h.send_header("Content-Length", str(len(body)))
+        h.send_header("Cache-Control", "no-store")
+        for name, value in (extra or {}).items():
+            h.send_header(name, value)
+        h.end_headers()
+        h.wfile.write(body)
+    except OSError:
+        pass                      # the client hung up; nobody left to tell
+
+
+def _read_body(h: Any) -> Optional[bytes]:
+    """The request body, or None after answering 411/413 or dropping a client
+    that trickles it. The deadline covers the WHOLE body: a per-recv timeout
+    would let one byte every 9 s hold a thread for hours."""
+    raw = h.headers.get("Content-Length")
+    try:
+        length = int(raw) if raw is not None else -1
+    except ValueError:
+        length = -1
+    if length < 0:
+        _json(h, 411, {"error": "length required"})
+        return None
+    if length > BODY_MAX:
+        _json(h, 413, {"error": "body too large"})
+        return None
+    deadline = time.monotonic() + BODY_DEADLINE_SEC
+    body = b""
+    try:
+        while len(body) < length:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError
+            h.connection.settimeout(left)
+            chunk = h.rfile.read1(length - len(body))
+            if not chunk:
+                raise ConnectionError
+            body += chunk
+    except OSError:               # TimeoutError and ConnectionError included
+        h.close_connection = True
+        return None
+    return body
+
+
+class LiveMap:
+    """The /api/live/* endpoints, fed by the reader through publish()."""
+
+    def __init__(self, password: str) -> None:
+        self.hub = Hub()
+        self.access = Access(password)
+
+    def publish(self, line: str, *, full: bool) -> None:
+        self.hub.publish(line, full=full)
+
+    def handle_get(self, h: Any, path: str) -> None:
+        if path == "/api/live/session":
+            token = self.access.first_valid(cookie_values(h.headers))
+            _json(h, 200, {"authenticated": token is not None})
+        else:
+            h.send_error(404, "no such endpoint")
+
+    def handle_post(self, h: Any, path: str) -> None:
+        if path not in ("/api/live/login", "/api/live/logout"):
+            # Byte for byte what stdlib answers when there is no do_POST at all.
+            h.send_error(501, "Unsupported method ('POST')")
+            return
+        body = _read_body(h)
+        if body is None:
+            return
+        ctype = (h.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if ctype != "application/json":
+            # A cross-site form cannot send JSON, and a cross-site fetch() that
+            # does needs a preflight, which OPTIONS (stdlib's 501) refuses.
+            _json(h, 415, {"error": "unsupported media type"})
+            return
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception:         # RecursionError on 3.10/3.11 for '[' * 1024, too
+            data = None
+        if not isinstance(data, dict):
+            _json(h, 400, {"error": "bad request"})
+            return
+        client = client_key(h.headers, h.client_address[0])
+        presented = cookie_values(h.headers)
+        if path == "/api/live/logout":
+            self._logout(h, client, presented)
+        else:
+            self._login(h, data, client, presented)
+
+    def _login(self, h: Any, data: dict, client: str, presented: list[str]) -> None:
+        password = data.get("password")
+        if not isinstance(password, str) or not password:
+            _json(h, 400, {"error": "bad request"})
+            return
+        result, value = self.access.login(password, client, presented)
+        if result == "limited":
+            _json(h, 429, {"error": "too many attempts"}, {"Retry-After": str(value)})
+        elif result == "wrong":
+            _json(h, 401, {"error": "wrong password"})
+        else:
+            cookie = (f"{COOKIE}={value}; Max-Age={int(SESSION_TTL_SEC)}; "
+                      "HttpOnly; Secure; SameSite=Strict")
+            _json(h, 200, {"authenticated": True}, {"Set-Cookie": cookie})
+
+    def _logout(self, h: Any, client: str, presented: list[str]) -> None:
+        if self.access.revoke(presented):
+            log.info("live: logout from %s", client)
+            self.hub.kick()
+        _json(h, 200, {"authenticated": False},
+              {"Set-Cookie": f"{COOKIE}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"})
+
+
+def live_from_config(value: Any) -> Optional[LiveMap]:
+    """The live map for this config value, or None, and then it does not exist."""
+    password, reason = validate_password(value)
+    if password is None:
+        if reason:
+            log.warning("%s", reason)
+        return None
+    log.info("live map enabled for moderators (login via ?mode=live)")
+    return LiveMap(password)

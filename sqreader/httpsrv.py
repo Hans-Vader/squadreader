@@ -354,6 +354,7 @@ def _make_handler(
     stale_after_sec: float = 30.0,
     cors_origin: str = "",
     stats_db: Optional[Path] = None,
+    live: Any = None,
 ) -> type[http.server.BaseHTTPRequestHandler]:
 
     # Static layer bounds, for turning heatmap world coordinates into something
@@ -425,6 +426,8 @@ def _make_handler(
                           "/viewer-next", "/viewer-next/") \
                     or path.startswith("/assets/"):
                 self._handle_spa(path)
+            elif live is not None and path.startswith("/api/live/"):
+                live.handle_get(self, path)
             else:
                 self.send_error(404, "no such endpoint")
 
@@ -1041,6 +1044,13 @@ def _make_handler(
                     ConnectionAbortedError):
                 pass
 
+    if live is not None:
+        # Fork-only moderator live map (sqreader/live.py). POST exists only
+        # while it is enabled, so a build without live_password keeps stdlib's 501.
+        def do_POST(self: Any) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
+            live.handle_post(self, self.path.split("?", 1)[0])
+        _H.do_POST = do_POST  # type: ignore[attr-defined]
+
     return _H
 
 
@@ -1059,6 +1069,7 @@ def serve_in_background(host: str, port: int, heartbeat: _TickBeat,
                         stale_after_sec: float = 30.0,
                         cors_origin: str = "",
                         stats_db: Optional[Path] = None,
+                        live: Any = None,
                         ) -> _ThreadingHTTPServer:
     """Bind and start the server on a daemon thread; return the server.
 
@@ -1082,7 +1093,7 @@ def serve_in_background(host: str, port: int, heartbeat: _TickBeat,
         (host, port),
         _make_handler(heartbeat, recordings_dir, meta_cache, icons_dir,
                       sqmaps_dir, frontend_dir, health_provider,
-                      stale_after_sec, cors_origin, stats_db),
+                      stale_after_sec, cors_origin, stats_db, live),
     )
     t = threading.Thread(target=srv.serve_forever, daemon=True,
                          name="sqreader-httpsrv")

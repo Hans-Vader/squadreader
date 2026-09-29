@@ -105,10 +105,12 @@ Dieser Block kommt ans Ende von `sqreader.config.example.json`; das bisher letzt
 
 ## 5. HTTP-Schnittstelle
 
-**Für alle Antworten unter `/api/live/`:**
+**Für alle Antworten der Live-Endpunkte (`session`, `login`, `logout`, `stream`):**
 - Sie tragen `Cache-Control: no-store`.
 - Sie tragen nie CORS-Header. `_send_cors_headers` wird dort nicht aufgerufen, auch nicht mit `--cors-origin`.
 - JSON-Antworten haben `Content-Type: application/json` und ein `Content-Length`.
+
+Die 404- und 501-Antworten in der Tabelle bleiben dagegen genau die der Standardbibliothek wie heute.
 
 | Methode und Pfad | Auth | Antworten |
 |---|---|---|

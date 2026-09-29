@@ -87,6 +87,23 @@ def test_login_sets_a_strict_session_cookie():
         assert (st, json.loads(body)) == (200, {"authenticated": True})
 
 
+def test_a_browser_style_cookie_header_authenticates_but_a_flood_of_duplicates_does_not():
+    """A browser sends every cookie of the host in ONE header, and a sibling app
+    on the origin can plant its own sqr_live before ours: the first VALID one
+    wins, out of at most the first few."""
+    with running(live.LiveMap(PW)) as port:
+        _, token, _ = login(port)
+
+        def authenticated(cookie_header):
+            _, _, body = request(port, "GET", "/api/live/session",
+                                 headers={"Cookie": cookie_header})
+            return json.loads(body)["authenticated"]
+
+        assert authenticated(f"other=1; {live.COOKIE}=junk; {live.COOKIE}={token}") is True
+        flood = "; ".join(f"{live.COOKIE}=junk{i}" for i in range(20))
+        assert authenticated(f"{flood}; {live.COOKIE}={token}") is False
+
+
 def test_a_wrong_password_always_gets_the_same_401():
     with running(live.LiveMap(PW)) as port:
         a = request(port, "POST", "/api/live/login", {"password": WRONG})

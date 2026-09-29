@@ -20,6 +20,7 @@ def test_pick_keeps_every_full_frame_and_only_the_newest_position():
     f5, p6, p7 = _ev(5, True), _ev(6, False), _ev(7, False)
     assert live.pick([p1, f2, p3, p4, f5, p6, p7]) == [f2, f5, p7]
     assert live.pick([p1, p3]) == [p3]
+    assert live.pick([p1, f2]) == [f2]            # a full frame supersedes the position before it
     assert live.pick([f2]) == [f2]
     assert live.pick([f2, p3]) == [f2, p3]
     assert live.pick([]) == []

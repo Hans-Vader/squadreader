@@ -44,6 +44,7 @@ KEEPALIVE_SEC = 15.0
 RETRY_MS = 3000
 WRITE_TIMEOUT_SEC = 20.0
 REFUSED_LOG_INTERVAL_SEC = 60.0
+MAX_COOKIE_VALUES = 8             # sqr_live values read from one request
 
 COOKIE = "sqr_live"
 
@@ -102,13 +103,19 @@ def client_key(headers: Any, peer: str) -> str:
 
 
 def cookie_values(headers: Any) -> list[str]:
-    """Every sqr_live value the browser sent, in order."""
-    values = []
+    """The first MAX_COOKIE_VALUES sqr_live values the browser sent, in order.
+
+    A browser sends one or two. The cap keeps a header stuffed with duplicates
+    from costing a lock and a lookup for every one of them.
+    """
+    values: list[str] = []
     for header in headers.get_all("Cookie") or []:
         for part in header.split(";"):
             name, sep, value = part.strip().partition("=")
             if sep and name == COOKIE and value:
                 values.append(value)
+                if len(values) == MAX_COOKIE_VALUES:
+                    return values
     return values
 
 
@@ -122,11 +129,18 @@ class Access:
         self._sessions: dict[str, tuple[float, str]] = {}
         self._fails: deque[tuple[float, str]] = deque()      # (monotonic time, client)
 
-    def reset(self, password: Optional[str]) -> None:
-        """A new password (None: nobody can log in) and no sessions at all."""
+    def reset(self, password: Optional[str]) -> bool:
+        """A new password (None: nobody can log in) and no sessions at all.
+
+        True if that changed the stored password, "no password" counting as a
+        value of its own. The sessions are gone either way.
+        """
+        new = _digest(password) if password else None
         with self._lock:
-            self._digest = _digest(password) if password else None
+            changed = new != self._digest
+            self._digest = new
             self._sessions.clear()
+        return changed
 
     def login(self, given: str, client: str,
               presented: list[str]) -> tuple[str, Any]:
@@ -402,29 +416,53 @@ class LiveMap:
         # Runs between two bytecodes of the main thread, which may be inside
         # publish() or a log call. Taking locks here could deadlock, so a
         # thread does the work.
-        threading.Thread(target=self.reload, name="sqreader-live-reload",
-                         daemon=True).start()
+        try:
+            threading.Thread(target=self.reload, name="sqreader-live-reload",
+                             daemon=True).start()
+        except Exception:
+            # No thread to be had (RuntimeError: can't start new thread), and an
+            # exception here would surface in the reader's tick loop. Fail closed
+            # on the spot, without logging. Safe from the signal context: the
+            # main thread never holds Access._lock, and the hub's Condition
+            # is re-entrant.
+            self.access.reset(None)
+            self.hub.kick()
 
     def reload(self) -> None:
         """Revoke every session and re-read live_password. Fails closed: a file
-        that cannot be read, or holds no valid password, disables logins."""
+        that cannot be read, or holds no valid password, disables logins.
+
+        The log says which of the three happened. A file that still holds the
+        old password (a Docker single-file bind mount keeps serving the old
+        inode after an editor replaced the file) is reported as UNCHANGED, and a
+        failure names its reason: an error TYPE or a rule, never a message, which
+        could quote the file, and never the value.
+        """
         path = None
+        why = None
         try:
             # Inside the try: Path.cwd() raises when the process's cwd was deleted
             # (a directory-swap deploy), and that must still revoke everyone.
             path = config_path()
             data = json.loads(path.read_text(encoding="utf-8"))
             value = data.get("live_password") if isinstance(data, dict) else None
-        except Exception:
+        except Exception as exc:
             value = None
-        password, _reason = validate_password(value)
-        self.access.reset(password)
+            why = type(exc).__name__
+        password, reason = validate_password(value)
+        if password is None and why is None:
+            why = (reason.removeprefix("live map disabled: ") if reason
+                   else "live_password is not set")
+        changed = self.access.reset(password)
         self.hub.kick()
         if password is None:
-            log.warning("live: SIGHUP: all sessions revoked; NO valid live_password in %s, "
-                        "logins disabled until fixed", path)
-        else:
+            log.warning("live: SIGHUP: all sessions revoked; NO valid live_password in %s "
+                        "(%s), logins disabled until fixed", path, why)
+        elif changed:
             log.warning("live: SIGHUP: all sessions revoked, password reloaded")
+        else:
+            log.warning("live: SIGHUP: all sessions revoked; live_password in %s is UNCHANGED",
+                        path)
 
     def handle_get(self, h: Any, path: str) -> None:
         if path == "/api/live/session":

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from http.client import HTTPMessage
 
 import pytest
 
@@ -97,6 +98,18 @@ def test_reset_swaps_the_password_and_ends_every_session():
     assert a.login(other, "c", [])[0] == "wrong"
 
 
+def test_reset_says_whether_the_password_changed():
+    a = live.Access(PW)
+    _, token = a.login(PW, "c", [])
+    assert a.reset(PW) is False
+    assert not a.valid(token)                     # unchanged or not, nobody stays logged in
+    assert a.reset("another-password-long-enough") is True
+    assert a.reset("another-password-long-enough") is False
+    assert a.reset(None) is True                  # "no password" is a value of its own
+    assert a.reset(None) is False
+    assert a.reset(PW) is True                    # a repaired config after a failed reload
+
+
 def test_login_is_logged_without_password_or_token(caplog):
     caplog.set_level("INFO", logger="sqreader.live")
     a = live.Access(PW)
@@ -129,10 +142,38 @@ class _Headers:
     (("not-an-ip",), "172.18.0.2", "172.18.0.2"),
     (("2001:db8:1:2:3:4:5:6",), "172.18.0.2", "2001:db8:1:2::/64"),
     (("::ffff:1.2.3.4",), "172.18.0.2", "1.2.3.4"),
+    # ipaddress accepts ANY text after "%" as an IPv6 scope id, CR/LF included, and
+    # str() of that address repeats it; only the /64 network drops it again.
+    (("fe80::1%x\r\n INFO sqreader.live: forged",), "172.18.0.2", "fe80::/64"),
     ((), "garbage", "unknown"),
 ])
 def test_client_key(forwarded, peer, key):
-    assert live.client_key(_Headers(*forwarded), peer) == key
+    got = live.client_key(_Headers(*forwarded), peer)
+    assert got == key
+    assert "\r" not in got and "\n" not in got and "INFO" not in got     # log-safe, always
+
+
+def _sqr_live(*values):
+    """The request headers of a browser that sends one sqr_live cookie per value."""
+    msg = HTTPMessage()
+    msg["Cookie"] = "; ".join(f"{live.COOKIE}={v}" for v in values)
+    return msg
+
+
+def test_cookie_values_reads_at_most_the_first_eight():
+    a = live.Access(PW)
+    _, token = a.login(PW, "c", [])
+    last_one_read = [f"junk{i}" for i in range(live.MAX_COOKIE_VALUES - 1)] + [token]
+    assert a.first_valid(live.cookie_values(_sqr_live(*last_one_read))) == token
+    flood = [f"junk{i}" for i in range(20)] + [token]
+    values = live.cookie_values(_sqr_live(*flood))
+    assert values == flood[:live.MAX_COOKIE_VALUES]
+    assert a.first_valid(values) is None                # the valid one came too late
+    # The cap is for the whole request, not per Cookie header.
+    one_header_each = HTTPMessage()
+    for value in flood:
+        one_header_each["Cookie"] = f"{live.COOKIE}={value}"
+    assert live.cookie_values(one_header_each) == flood[:live.MAX_COOKIE_VALUES]
 
 
 def test_a_client_is_limited_after_five_failures_even_with_the_right_password():
@@ -180,6 +221,16 @@ def test_reaching_a_limit_is_logged_once(caplog):
         a.login(WRONG, "1.2.3.4", [])
     assert caplog.text.count("live: login limit reached for 1.2.3.4") == 1
     assert caplog.text.count("live: login failed from 1.2.3.4") == live.FAILS_PER_CLIENT
+
+
+def test_reaching_the_global_limit_is_logged_once(monkeypatch, caplog):
+    caplog.set_level("WARNING", logger="sqreader.live")
+    monkeypatch.setattr(live, "FAILS_GLOBAL", 3)
+    a = live.Access(PW)
+    for i in range(6):                  # the third ends the budget; the rest are refused
+        a.login(WRONG, f"10.0.0.{i}", [])
+    assert caplog.text.count("live: global login limit reached") == 1
+    assert "live: login limit reached for" not in caplog.text    # nobody had 5 of their own
 
 
 def test_failures_stay_bounded_under_forged_client_keys():

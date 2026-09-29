@@ -1093,7 +1093,7 @@ def serve_in_background(host: str, port: int, heartbeat: _TickBeat,
         (host, port),
         _make_handler(heartbeat, recordings_dir, meta_cache, icons_dir,
                       sqmaps_dir, frontend_dir, health_provider,
-                      stale_after_sec, cors_origin, stats_db, live),
+                      stale_after_sec, cors_origin, stats_db, live=live),
     )
     t = threading.Thread(target=srv.serve_forever, daemon=True,
                          name="sqreader-httpsrv")

@@ -57,6 +57,25 @@ def test_a_missing_config_file_fails_closed(tmp_path, monkeypatch):
     assert lm.access.login(PW, "c", [])[0] == "wrong"
 
 
+def test_an_unresolvable_config_path_still_revokes_everyone(monkeypatch, caplog):
+    """Path.cwd() raises once the process's cwd was deleted (a directory-swap
+    deploy). Revoking must not depend on finding the file."""
+    lm = live.LiveMap(PW)
+    _, token = lm.access.login(PW, "c", [])
+    assert lm.access.valid(token)
+    cursor, wake, _ = lm.hub.subscribe(1)
+
+    def cwd_is_gone():
+        raise FileNotFoundError("the working directory was deleted")
+
+    monkeypatch.setattr(live, "config_path", cwd_is_gone)
+    lm.reload()
+    assert not lm.access.valid(token)
+    assert lm.access.login(PW, "c", [])[0] == "wrong"
+    assert lm.hub.wait(cursor, wake, 2)[3] != wake        # kicked: streams re-check
+    assert "all sessions revoked; NO valid live_password" in caplog.text
+
+
 def test_config_path_follows_config_py(tmp_path, monkeypatch):
     monkeypatch.delenv("SQREADER_CONFIG", raising=False)
     monkeypatch.chdir(tmp_path)

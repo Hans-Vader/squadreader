@@ -408,8 +408,11 @@ class LiveMap:
     def reload(self) -> None:
         """Revoke every session and re-read live_password. Fails closed: a file
         that cannot be read, or holds no valid password, disables logins."""
-        path = config_path()
+        path = None
         try:
+            # Inside the try: Path.cwd() raises when the process's cwd was deleted
+            # (a directory-swap deploy), and that must still revoke everyone.
+            path = config_path()
             data = json.loads(path.read_text(encoding="utf-8"))
             value = data.get("live_password") if isinstance(data, dict) else None
         except Exception:

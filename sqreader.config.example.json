@@ -58,5 +58,17 @@
   "central_url": null,
   "push_enabled": false,
   "push_replay": true,
-  "push_backlog_dir": null
+  "push_backlog_dir": null,
+
+  "_live_comment": [
+    "Moderator-only LIVE map. OFF unless live_password is set.",
+    "Whoever knows it sees BOTH teams in real time: give it to moderators only.",
+    "One shared password, at least 20 characters, e.g.",
+    "  python3 -c 'import secrets; print(secrets.token_urlsafe(24))'",
+    "It is a CREDENTIAL: chmod 600 this file.",
+    "Moderators log in at https://<site>/?mode=live (HTTPS required).",
+    "Change it or kick everyone out without a restart: edit it, then send SIGHUP.",
+    "See docs/live-map.md."
+  ],
+  "live_password": null
 }

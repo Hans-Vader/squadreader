@@ -124,3 +124,12 @@ def test_cli_wires_the_live_map_into_serve():
                    "live.publish(pos_line, full=False)",
                    "signal.signal(signal.SIGHUP, live.on_sighup)"):
         assert needle in src, needle
+
+
+def test_the_example_config_documents_live_password():
+    example = Path(sqreader.__file__).resolve().parent.parent / "sqreader.config.example.json"
+    data = json.loads(example.read_text(encoding="utf-8"))
+    assert data["live_password"] is None
+    text = " ".join(data["_live_comment"])
+    for needle in ("chmod 600", "SIGHUP", "?mode=live", "docs/live-map.md"):
+        assert needle in text, needle

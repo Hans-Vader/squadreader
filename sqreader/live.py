@@ -20,10 +20,12 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import secrets
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any, Optional
 
 log = logging.getLogger("sqreader.live")
@@ -376,6 +378,14 @@ def _fmt_duration(seconds: float) -> str:
     return f"{s // 60}m{s % 60:02d}s"
 
 
+def config_path() -> Path:
+    """Where config.py reads the config from (config._load), kept in step by
+    hand: SIGHUP re-reads live_password alone and must not reset the cache
+    that every other key was read from."""
+    env = os.environ.get("SQREADER_CONFIG")
+    return Path(env) if env else Path.cwd() / "sqreader.config.json"
+
+
 class LiveMap:
     """The /api/live/* endpoints, fed by the reader through publish()."""
 
@@ -387,6 +397,31 @@ class LiveMap:
 
     def publish(self, line: str, *, full: bool) -> None:
         self.hub.publish(line, full=full)
+
+    def on_sighup(self, _signum: int, _frame: Any) -> None:
+        # Runs between two bytecodes of the main thread, which may be inside
+        # publish() or a log call. Taking locks here could deadlock, so a
+        # thread does the work.
+        threading.Thread(target=self.reload, name="sqreader-live-reload",
+                         daemon=True).start()
+
+    def reload(self) -> None:
+        """Revoke every session and re-read live_password. Fails closed: a file
+        that cannot be read, or holds no valid password, disables logins."""
+        path = config_path()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            value = data.get("live_password") if isinstance(data, dict) else None
+        except Exception:
+            value = None
+        password, _reason = validate_password(value)
+        self.access.reset(password)
+        self.hub.kick()
+        if password is None:
+            log.warning("live: SIGHUP: all sessions revoked; NO valid live_password in %s, "
+                        "logins disabled until fixed", path)
+        else:
+            log.warning("live: SIGHUP: all sessions revoked, password reloaded")
 
     def handle_get(self, h: Any, path: str) -> None:
         if path == "/api/live/session":

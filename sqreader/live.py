@@ -371,12 +371,19 @@ def _read_body(h: Any) -> Optional[bytes]:
     return body
 
 
+def _fmt_duration(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 60}m{s % 60:02d}s"
+
+
 class LiveMap:
     """The /api/live/* endpoints, fed by the reader through publish()."""
 
     def __init__(self, password: str) -> None:
         self.hub = Hub()
         self.access = Access(password)
+        self._refused_lock = threading.Lock()
+        self._refused_at = float("-inf")      # monotonic time of the last refusal log
 
     def publish(self, line: str, *, full: bool) -> None:
         self.hub.publish(line, full=full)
@@ -385,6 +392,8 @@ class LiveMap:
         if path == "/api/live/session":
             token = self.access.first_valid(cookie_values(h.headers))
             _json(h, 200, {"authenticated": token is not None})
+        elif path == "/api/live/stream":
+            self._stream(h)
         else:
             h.send_error(404, "no such endpoint")
 
@@ -437,6 +446,72 @@ class LiveMap:
             self.hub.kick()
         _json(h, 200, {"authenticated": False},
               {"Set-Cookie": f"{COOKIE}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"})
+
+    def _stream(self, h: Any) -> None:
+        token = self.access.first_valid(cookie_values(h.headers))
+        if token is None:
+            _json(h, 401, {"error": "not logged in"})
+            return
+        client = client_key(h.headers, h.client_address[0])
+        admitted = self.hub.subscribe(MAX_STREAMS)
+        if admitted is None:
+            self._log_refused(client)
+            _json(h, 503, {"error": "too many live viewers"}, {"Retry-After": "30"})
+            return
+        cursor, wake, first = admitted
+        log.info("live: stream opened from %s (%d/%d)", client, self.hub.subscribers,
+                 MAX_STREAMS)
+        started = time.monotonic()
+        reason = "client gone"
+        try:
+            h.connection.settimeout(WRITE_TIMEOUT_SEC)
+            # HTTP/1.0 (the handler's default, never switched here): the body is
+            # delimited by the close, so neither Content-Length nor chunking.
+            h.send_response(200)
+            h.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            h.send_header("Cache-Control", "no-store")
+            h.send_header("X-Accel-Buffering", "no")
+            h.send_header("Connection", "close")
+            h.end_headers()
+            h.wfile.write(f"retry: {RETRY_MS}\n\n".encode("ascii") + (first or b""))
+            last_write = time.monotonic()
+            while True:
+                idle = time.monotonic() - last_write
+                status, events, cursor, wake = self.hub.wait(
+                    cursor, wake, max(0.0, KEEPALIVE_SEC - idle))
+                if status == "closed":
+                    reason = "server stopping"
+                    break
+                if status == "gap":
+                    reason = "too slow"
+                    break
+                if not self.access.valid(token):
+                    reason = "session ended"
+                    break
+                if events:
+                    h.wfile.write(b"".join(payload for _s, _f, payload in pick(events)))
+                    last_write = time.monotonic()
+                elif time.monotonic() - last_write >= KEEPALIVE_SEC:
+                    h.wfile.write(b": ka\n\n")
+                    last_write = time.monotonic()
+        except TimeoutError:
+            reason = "write timeout"
+        except OSError:
+            reason = "client gone"
+        finally:
+            self.hub.unsubscribe()
+            h.close_connection = True
+            log.info("live: stream closed from %s after %s (%s)", client,
+                     _fmt_duration(time.monotonic() - started), reason)
+
+    def _log_refused(self, client: str) -> None:
+        now = time.monotonic()
+        with self._refused_lock:
+            if now - self._refused_at < REFUSED_LOG_INTERVAL_SEC:
+                return
+            self._refused_at = now
+        log.warning("live: stream refused from %s (%d/%d in use)", client,
+                    MAX_STREAMS, MAX_STREAMS)
 
 
 def live_from_config(value: Any) -> Optional[LiveMap]:

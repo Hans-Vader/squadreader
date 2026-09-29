@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import socket
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -74,3 +75,71 @@ def raw(port, data: bytes) -> bytes:
 
 def without_date(response: bytes) -> bytes:
     return b"\r\n".join(ln for ln in response.split(b"\r\n") if not ln.startswith(b"Date: "))
+
+
+def full(tick, pad=0):
+    return json.dumps({"tick": tick, "players": [], "damageEvents": [], "pad": "x" * pad}) + "\n"
+
+
+def pos(tick):
+    return json.dumps({"t": "pos", "tick": tick, "players": [], "vehicles": []}) + "\n"
+
+
+def event(line):
+    return b"data: " + line.rstrip("\n").encode() + b"\n\n"
+
+
+def wait_for(pred, timeout=3):
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if pred():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+class Stream:
+    """One open GET /api/live/stream, read incrementally."""
+
+    def __init__(self, port, token, rcvbuf=None):
+        self.s = socket.socket()
+        if rcvbuf:
+            self.s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, rcvbuf)
+        self.s.settimeout(5)
+        self.s.connect(("127.0.0.1", port))
+        hdr = f"Cookie: {live.COOKIE}={token}\r\n" if token else ""
+        self.s.sendall(f"GET /api/live/stream HTTP/1.1\r\nHost: t\r\n{hdr}\r\n".encode())
+        self.buf = b""
+
+    def _until(self, marker, timeout):
+        self.s.settimeout(timeout)
+        while marker not in self.buf:
+            chunk = self.s.recv(65536)
+            if not chunk:
+                raise EOFError(self.buf)
+            self.buf += chunk
+        i = self.buf.index(marker) + len(marker)
+        out, self.buf = self.buf[:i], self.buf[i:]
+        return out
+
+    def head(self):
+        return self._until(b"\r\n\r\n", 5)
+
+    def event(self, timeout=5):
+        return self._until(b"\n\n", timeout)
+
+    def closed_within(self, seconds):
+        self.s.settimeout(seconds)
+        try:
+            while True:
+                chunk = self.s.recv(65536)
+                if not chunk:
+                    return True
+                self.buf += chunk
+        except TimeoutError:
+            return False
+        except OSError:
+            return True
+
+    def close(self):
+        self.s.close()

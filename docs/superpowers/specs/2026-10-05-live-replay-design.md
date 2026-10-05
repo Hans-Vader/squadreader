@@ -173,7 +173,7 @@ Eine einzige Funktion für Einstieg, „● LIVE“-Klick und Rundenwechsel:
 
 1. `fetchLiveRound()` aufrufen.
    - Bei `"anon"`: Live verlassen, Login-Dialog mit „Sitzung abgelaufen – bitte neu anmelden.“
-   - Bei `null`: Wartezustand mit Banner „Warte auf die nächste Runde…“ und neuer Versuch nach 5 s, solange der Wartezustand gilt.
+   - Bei `null`: Wartezustand mit Banner „Warte auf die nächste Runde…“ und neuer Versuch nach 5 s, solange der Wartezustand gilt und keine fertige Aufnahme geöffnet wurde. Die Ansicht bleibt, wo sie ist (Startseite oder Ende der letzten Runde).
 2. `id = "@live:" + round.id`, `from = round.latestMs − LIVE_DELAY_MS`.
 3. Je nach Stand:
    - **Andere oder keine Live-Aufnahme offen:** `@live:<id>` ab `from` öffnen, `playing: true`, Modus `replay`, URL `?mode=live`. Das passiert in einem Store-Update, damit der Loader nicht erst ab Rundenstart lädt.
@@ -203,7 +203,7 @@ Läuft nur, solange `replay.id` eine Live-ID ist. Ein 250-ms-Intervall liest den
 - **`TopBar.tsx`:**
   - Bei einer Live-ID zeigt die Pille „live“ statt „recording“.
   - Das „← Back“ des Replays ist ausgeblendet.
-  - `LiveControls` zeigt „● LIVE“, „← Zurück“ (zur Startseite) und „Abmelden“. Das gilt bei einer Live-ID oder im Wartezustand.
+  - `LiveControls` zeigt „● LIVE“, „← Zurück“ (zur Startseite) und „Abmelden“, solange eine Live-ID offen ist, also auch beim Warten nach einem Rundenende. Wer von der Startseite aus auf eine Runde wartet, bleibt dort und sieht nur das Banner.
 - **„Past Matches“:** Wird darüber eine fertige Aufnahme geöffnet, ist man nicht mehr live. `LiveControls` verschwindet, weil die ID keine Live-ID mehr ist, und der Wartezustand endet.
 
 ## 6. Login-Button (`LiveEntry`, Startseite)

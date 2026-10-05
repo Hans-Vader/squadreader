@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { DEFAULT_VIEW } from "./types";
 import { patchSnapshot, resetCarryOver } from "./carryOver";
 import { replayLoad } from "./replayLoad";
+import { isLiveId } from "../api/recordings";
 import type { ReplayMarker } from "./replayMarkers";
 import type {
   ConnStatus, KillFeedEntry, Mode, RecordingMeta, Snapshot, TeamState, ViewState,
@@ -511,8 +512,10 @@ export const useViewerStore = create<Store>((set) => ({
           truncated: !!opts?.truncated,
           // Only ever widened here, and only if the server told us nothing: a
           // recording whose length we had to infer is the one case where the
-          // axis legitimately settles at the end.
-          totalMs: r.totalMs || Math.max(1, r.bufferedMs - r.startMs),
+          // axis legitimately settles at the end. Never for a live round: its
+          // axis is "match start to newest frame" and keeps growing (totalMs 0).
+          totalMs: r.totalMs || (isLiveId(r.id) ? 0
+                   : Math.max(1, r.bufferedMs - (r.matchStartMs || r.startMs))),
         },
       };
     });

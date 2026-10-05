@@ -23,6 +23,7 @@ import { sampleTickets, ticketsAt, type TicketPoint } from "../state/ticketSerie
 import { teamColor } from "../canvas/draw";
 import { vehicleIconUrl, vehicleTurretIconUrl } from "../canvas/icons";
 import { flyTo } from "../canvas/flyTo";
+import { isLiveId, LIVE_DELAY_MS } from "../api/recordings";
 
 function fmtMMSS(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "—";
@@ -238,6 +239,7 @@ export function TimelineBar() {
   const frameCount  = useViewerStore((s) => s.replay.frameCount);
   const loading     = useViewerStore((s) => s.replay.loading);
   const bufferedMs  = useViewerStore((s) => s.replay.bufferedMs);
+  const replayId = useViewerStore((s) => s.replay.id);
   const totalMs     = useViewerStore((s) => s.replay.totalMs);
   const startMsStore = useViewerStore((s) => s.replay.startMs);
   const matchStartMs = useViewerStore((s) => s.replay.matchStartMs);
@@ -347,6 +349,11 @@ export function TimelineBar() {
    * something, both want the last frame at or before the target instead.
    */
   const seekToMs = (target: number, prefer: "after" | "before" = "after") => {
+    // Live: nothing exists past the live edge yet, and asking the server for it
+    // would throw away everything held. Past the edge means "live".
+    // Once the live round stopped loading (ended or dropped) clamp into the held window instead.
+    if (isLiveId(replayId)) target = loading ? Math.min(target, bufferedMs - LIVE_DELAY_MS)
+                                             : Math.min(Math.max(target, windowStart), bufferedMs);
     const held = target >= windowStart - 1000 && target <= bufferedMs;
     if (!held) { restartReplayAt(Math.max(startMs, target)); return; }
     let lo = 0, hi = lastIdx;

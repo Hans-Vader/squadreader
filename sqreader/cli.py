@@ -934,6 +934,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
             if (cand / "index.html").is_file():
                 frontend_dir = cand
                 break
+    # Fork-only moderator live map: None (absent) unless a live password is set
+    # and rounds are recorded: it plays the round being recorded.
+    from .live import live_from_config
+    live = live_from_config(config.get("live_password"), recordings_dir)
     srv = serve_in_background(args.host, args.port, beat,
                               recordings_dir=recordings_dir,
                               icons_dir=icons_dir,
@@ -945,7 +949,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
                               # slow cadence doesn't make /health twitchy.
                               stale_after_sec=max(30.0, 15.0 / args.hz),
                               cors_origin=args.cors_origin,
-                              stats_db=stats_db_path)
+                              stats_db=stats_db_path,
+                              live=live)
     period = 1.0 / args.hz
     feature_list = ["/health"]
     if recordings_dir:
@@ -1021,6 +1026,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         stop["flag"] = True
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
+    if live is not None:
+        signal.signal(signal.SIGHUP, live.on_sighup)
 
     tick = 0
     started = time.time()
@@ -1044,6 +1051,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         "tick_sequence_required": True,
         "missing_tick_warned": False,
     }
+    if live is not None:
+        live.recording = lambda: record_state_box["current"]
     record_filename_buffer: list = []
     # Scanner-health streak counter. STABILITY-FIRST: a genuine suspicion
     # triggers an in-process cache reset, NEVER a process exit (see the

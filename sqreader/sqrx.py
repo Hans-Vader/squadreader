@@ -144,7 +144,8 @@ class SqrxReader:
         reader = self._dctx.stream_reader(self._f, read_across_frames=True)
         buf = b""
         while True:
-            chunk = reader.read(65536)
+            # read1, not read: read waits to fill 64 KiB, which a followed file never does.
+            chunk = reader.read1(65536)
             if not chunk:
                 break
             buf += chunk

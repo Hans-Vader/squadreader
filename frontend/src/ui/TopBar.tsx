@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 import { useViewerStore } from "../state/viewerStore";
 import { ClipRecorder } from "./ClipRecorder";
 import { SettingsMenu } from "./SettingsMenu";
+import { LiveControls } from "../live/LiveAccess";
 import { fmtDayMonth } from "../format";
+import { isLiveId } from "../api/recordings";
 
 export function TopBar() {
   const status = useViewerStore((s) => s.status);
@@ -17,6 +19,7 @@ export function TopBar() {
   const toggleScoreboard = useViewerStore((s) => s.toggleScoreboard);
   const mode = useViewerStore((s) => s.mode);
   const replayId = useViewerStore((s) => s.replay.id);
+  const live = isLiveId(replayId);
   const timelineVisible = useViewerStore((s) => s.timelineVisible);
   const toggleTimeline = useViewerStore((s) => s.toggleTimeline);
 
@@ -56,7 +59,7 @@ export function TopBar() {
                  : ageSec > 30 ? "bad"
                  : ageSec > 8  ? "warn" : "";
 
-  const statusClass = status === "live" ? "live"
+  const statusClass = live || status === "live" ? "live"
                     : status === "reconnecting" ? "bad"
                     : status === "replay" ? "warn"
                     : "warn";
@@ -96,7 +99,7 @@ export function TopBar() {
             BETA
           </span>
           <span className={"pill " + statusClass}>
-            {mode === "replay" ? "recording" : (STATUS_TR[status] ?? status)}
+            {mode === "replay" ? (live ? "live" : "recording") : (STATUS_TR[status] ?? status)}
           </span></div>
         <div>tick <b>{curSnap?.tick ?? "—"}</b>
           {" · "}<span>{rate}</span>
@@ -119,7 +122,7 @@ export function TopBar() {
       <div id="controls">
         {/* Exit-replay: return to the page the replay was opened from (site
             home as a fallback). Shown only while watching a recording. */}
-        {mode === "replay" && (
+        {mode === "replay" && !live && (
           <button className="tb-back" onClick={goBack}
                   title="back to previous page / site">← Back</button>
         )}
@@ -135,6 +138,7 @@ export function TopBar() {
                   onClick={() => toggleTimeline()}
                   title="ticket-loss timeline (G)">Tickets</button>
         )}
+        <LiveControls />
         <ClipRecorder />
         <SettingsMenu />
       </div>

@@ -116,14 +116,6 @@ def test_an_unresolvable_config_path_still_revokes_everyone(monkeypatch, caplog)
     assert "the working directory was deleted" not in caplog.text    # the type, not the message
 
 
-def test_config_path_follows_config_py(tmp_path, monkeypatch):
-    monkeypatch.delenv("SQREADER_CONFIG", raising=False)
-    monkeypatch.chdir(tmp_path)
-    assert live.config_path() == tmp_path / "sqreader.config.json"
-    monkeypatch.setenv("SQREADER_CONFIG", "/etc/x.json")
-    assert live.config_path() == Path("/etc/x.json")
-
-
 def test_sighup_hands_the_reload_to_a_thread(monkeypatch):
     lm = live.LiveMap(PW)
     seen = []

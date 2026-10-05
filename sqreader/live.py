@@ -20,13 +20,13 @@ import ipaddress
 import json
 import logging
 import math
-import os
 import secrets
 import threading
 import time
 from collections import deque
-from pathlib import Path
 from typing import Any, Optional
+
+from .config import config_path
 
 log = logging.getLogger("sqreader.live")
 
@@ -125,8 +125,8 @@ class Access:
     def __init__(self, password: Optional[str]) -> None:
         self._lock = threading.Lock()
         self._digest: Optional[bytes] = _digest(password) if password else None
-        # token -> (monotonic expiry, client key)
-        self._sessions: dict[str, tuple[float, str]] = {}
+        # token -> monotonic expiry
+        self._sessions: dict[str, float] = {}
         self._fails: deque[tuple[float, str]] = deque()      # (monotonic time, client)
 
     def reset(self, password: Optional[str]) -> bool:
@@ -168,7 +168,7 @@ class Access:
                 for token in presented:
                     self._sessions.pop(token, None)
                 self._fails = deque(f for f in self._fails if f[1] != client)
-                result = ("ok", self._new_session(client, now))
+                result = ("ok", self._new_session(now))
         if result[0] == "ok":
             log.info("live: login ok from %s (session %s)", client, session_id(result[1]))
         else:
@@ -198,10 +198,10 @@ class Access:
     def valid(self, token: str) -> bool:
         now = time.monotonic()
         with self._lock:
-            entry = self._sessions.get(token)
-            if entry is None:
+            expires = self._sessions.get(token)
+            if expires is None:
                 return False
-            if entry[0] <= now:
+            if expires <= now:
                 del self._sessions[token]
                 return False
             return True
@@ -231,15 +231,12 @@ class Access:
             return False
         return hmac.compare_digest(_digest(given), self._digest)
 
-    def _new_session(self, client: str, now: float) -> str:   # caller holds the lock
-        for token, (expires, _client) in list(self._sessions.items()):
-            if expires <= now:
-                del self._sessions[token]
+    def _new_session(self, now: float) -> str:               # caller holds the lock
+        self._sessions = {t: e for t, e in self._sessions.items() if e > now}
         while len(self._sessions) >= MAX_SESSIONS:
-            oldest = min(self._sessions, key=lambda t: self._sessions[t][0])
-            del self._sessions[oldest]
+            del self._sessions[min(self._sessions, key=self._sessions.__getitem__)]
         token = secrets.token_urlsafe(32)
-        self._sessions[token] = (now + SESSION_TTL_SEC, client)
+        self._sessions[token] = now + SESSION_TTL_SEC
         return token
 
 
@@ -387,17 +384,6 @@ def _read_body(h: Any) -> Optional[bytes]:
     return body
 
 
-def _fmt_duration(seconds: float) -> str:
-    s = int(seconds)
-    return f"{s // 60}m{s % 60:02d}s"
-
-
-def config_path() -> Path:
-    """Where config.py reads the config from (config._load), kept in step by
-    hand: SIGHUP re-reads live_password alone and must not reset the cache
-    that every other key was read from."""
-    env = os.environ.get("SQREADER_CONFIG")
-    return Path(env) if env else Path.cwd() / "sqreader.config.json"
 
 
 class LiveMap:
@@ -577,8 +563,8 @@ class LiveMap:
         finally:
             self.hub.unsubscribe()
             h.close_connection = True
-            log.info("live: stream closed from %s after %s (%s)", client,
-                     _fmt_duration(time.monotonic() - started), reason)
+            log.info("live: stream closed from %s after %dm%02ds (%s)", client,
+                     *divmod(int(time.monotonic() - started), 60), reason)
 
     def _log_refused(self, client: str) -> None:
         now = time.monotonic()

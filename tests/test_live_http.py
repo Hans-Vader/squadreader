@@ -72,7 +72,7 @@ def test_invalid_config_disables_live_and_never_logs_the_value(caplog, monkeypat
 
 def test_legacy_live_paths_stay_404_with_live_enabled(tmp_path):
     with running(live.LiveMap(PW), recordings_dir=tmp_path) as port:
-        for path in ("/stream", "/latest", "/api/alerts", "/api/live/nope"):
+        for path in ("/stream", "/latest", "/api/alerts", "/api/live/nope", "/api/live/stream"):
             assert request(port, "GET", path)[0] == 404, path
 
 

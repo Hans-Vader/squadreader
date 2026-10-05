@@ -1,16 +1,20 @@
-"""Moderator-only live map. Fork-only, and OFF unless live_password is set.
+"""Moderator-only live map. Fork-only, and OFF unless a live password is set.
 
 Upstream removed the live view from the public build (tests/test_public_no_live.py)
 because a live map shows every player of both teams in real time. This module
-brings it back behind a login: one shared password from sqreader.config.json,
-an in-memory session cookie, and a Server-Sent-Events stream of the reader's
-own frame lines.
+brings it back behind a login: one shared password (a scrypt hash in
+SQREADER_LIVE_PASSWORD_HASH, or live_password in sqreader.config.json), an
+in-memory session cookie, and the running round's growing .sqrx, streamed from
+any point and then followed as the recorder appends to it. The viewer plays it
+like any replay, with "live" a few seconds behind its newest frame.
 
-Without a valid live_password, live_from_config() returns None and the HTTP
-server stays exactly the public build: no /api/live/ route, no do_POST and no
-SIGHUP handler.
+Without a valid password, live_from_config() returns None and the HTTP server
+stays exactly the public build: no /api/live/ route, no do_POST and no SIGHUP
+handler.
 
-Design: docs/superpowers/specs/2026-09-29-live-moderation-design.md
+Design: docs/superpowers/specs/2026-09-29-live-moderation-design.md (login,
+sessions, SIGHUP) and docs/superpowers/specs/2026-10-05-live-replay-design.md
+(the round stream, the password hash).
 """
 from __future__ import annotations
 
@@ -48,9 +52,6 @@ FAIL_WINDOW_SEC = 600.0
 FAILS_PER_CLIENT = 5
 FAILS_GLOBAL = 50
 MAX_STREAMS = 10
-RING_SIZE = 128
-KEEPALIVE_SEC = 15.0
-RETRY_MS = 3000
 WRITE_TIMEOUT_SEC = 20.0
 POLL_SEC = 0.25                   # at the end of a round's file: look again after this
 REFUSED_LOG_INTERVAL_SEC = 60.0
@@ -318,102 +319,6 @@ class Access:
         return token
 
 
-class Hub:
-    """Hands the reader's frames to the stream threads.
-
-    publish() runs on the reader's main tick thread, the one that also writes
-    the recording. It encodes once, appends and notifies; it never touches a
-    socket and never raises, so no viewer can slow or break the recorder.
-    """
-
-    def __init__(self) -> None:
-        self._cond = threading.Condition()
-        self._seq = 0
-        # (seq, is_full, payload), filled only while someone is watching
-        self._ring: deque[tuple[int, bool, bytes]] = deque(maxlen=RING_SIZE)
-        self._last_full: Optional[bytes] = None
-        self._subs = 0
-        self._wake = 0
-        self._closed = False
-        self._failed = False
-
-    def publish(self, line: str, *, full: bool) -> None:
-        try:
-            payload = b"data: " + line.rstrip("\n").encode("utf-8", "replace") + b"\n\n"
-            with self._cond:
-                self._seq += 1
-                if full:
-                    self._last_full = payload
-                if self._subs:
-                    self._ring.append((self._seq, full, payload))
-                self._cond.notify_all()
-        except Exception:
-            if not self._failed:
-                self._failed = True
-                log.exception("live: publish failed (logged once; the recording is unaffected)")
-
-    @property
-    def subscribers(self) -> int:
-        with self._cond:
-            return self._subs
-
-    def subscribe(self, limit: int) -> Optional[tuple[int, int, Optional[bytes]]]:
-        """Admit one stream unless `limit` are open: (cursor, wake, newest full frame)."""
-        with self._cond:
-            if self._closed or self._subs >= limit:
-                return None
-            self._subs += 1
-            return self._seq, self._wake, self._last_full
-
-    def unsubscribe(self) -> None:
-        with self._cond:
-            self._subs -= 1
-            if self._subs == 0:
-                self._ring.clear()
-
-    def wait(self, cursor: int, wake: int,
-             timeout: float) -> tuple[str, list[tuple[int, bool, bytes]], int, int]:
-        """Block for a new frame, a kick()/close(), or `timeout` seconds.
-
-        Returns (status, events, cursor, wake). status is 'ok', 'gap' (the ring
-        overtook this reader, so frames are missing) or 'closed'.
-        """
-        with self._cond:
-            self._cond.wait_for(
-                lambda: self._seq > cursor or self._wake != wake or self._closed,
-                timeout=timeout)
-            if self._closed:
-                return "closed", [], cursor, self._wake
-            events = [e for e in self._ring if e[0] > cursor]
-            if self._seq > cursor and (not events or events[0][0] != cursor + 1):
-                return "gap", [], cursor, self._wake
-            return "ok", events, (events[-1][0] if events else cursor), self._wake
-
-    def kick(self) -> None:
-        """Wake every stream so it re-checks its session now."""
-        with self._cond:
-            self._wake += 1
-            self._cond.notify_all()
-
-    def close(self) -> None:
-        with self._cond:
-            self._closed = True
-            self._cond.notify_all()
-
-
-def pick(events: list[tuple[int, bool, bytes]]) -> list[tuple[int, bool, bytes]]:
-    """What a reader that fell behind still needs.
-
-    Every full frame, because each one carries the kill events that the kill
-    feed attributes, plus the newest position frame after the last full one.
-    Older position frames are superseded.
-    """
-    fulls = [e for e in events if e[1]]
-    last_full = fulls[-1][0] if fulls else -1
-    tail = [e for e in events if not e[1] and e[0] > last_full]
-    return fulls + tail[-1:]
-
-
 def _json(h: Any, code: int, obj: Any, extra: Optional[dict[str, str]] = None) -> None:
     body = json.dumps(obj).encode("utf-8")
     try:
@@ -500,10 +405,9 @@ class _Tail:
 
 
 class LiveMap:
-    """The /api/live/* endpoints, fed by the reader through publish()."""
+    """The /api/live/* endpoints."""
 
     def __init__(self, password: str) -> None:
-        self.hub = Hub()
         self.access = Access(password)
         # The round being recorded (recorder.RecordingState) or None; cli.py
         # points this at record_state_box["current"].
@@ -513,13 +417,9 @@ class LiveMap:
         self._refused_lock = threading.Lock()
         self._refused_at = float("-inf")      # monotonic time of the last refusal log
 
-    def publish(self, line: str, *, full: bool) -> None:
-        self.hub.publish(line, full=full)
-
     def on_sighup(self, _signum: int, _frame: Any) -> None:
-        # Runs between two bytecodes of the main thread, which may be inside
-        # publish() or a log call. Taking locks here could deadlock, so a
-        # thread does the work.
+        # Runs between two bytecodes of the main thread, which may be inside a
+        # log call. Taking locks here could deadlock, so a thread does the work.
         try:
             threading.Thread(target=self.reload, name="sqreader-live-reload",
                              daemon=True).start()
@@ -527,10 +427,9 @@ class LiveMap:
             # No thread to be had (RuntimeError: can't start new thread), and an
             # exception here would surface in the reader's tick loop. Fail closed
             # on the spot, without logging. Safe from the signal context: the
-            # main thread never holds Access._lock, and the hub's Condition
-            # is re-entrant.
+            # main thread never holds Access._lock. Open round streams notice
+            # within POLL_SEC.
             self.access.reset(None)
-            self.hub.kick()
 
     def reload(self) -> None:
         """Revoke every session and re-read the password. Fails closed: a file
@@ -548,7 +447,6 @@ class LiveMap:
         env = os.environ.get(ENV_HASH)
         if env:
             self.access.reset(validate_password(env, hash_only=True)[0])
-            self.hub.kick()
             log.warning("live: SIGHUP: all sessions revoked; password from %s is UNCHANGED "
                         "(environment: change it with a restart between rounds)", ENV_HASH)
             return
@@ -567,7 +465,6 @@ class LiveMap:
         if password is None and why is None:
             why = f"live_password {reason}" if reason else "live_password is not set"
         changed = self.access.reset(password)
-        self.hub.kick()
         if password is None:
             log.warning("live: SIGHUP: all sessions revoked; NO valid live_password in %s "
                         "(%s), logins disabled until fixed", path, why)
@@ -581,8 +478,6 @@ class LiveMap:
         if path == "/api/live/session":
             token = self.access.first_valid(cookie_values(h.headers))
             _json(h, 200, {"authenticated": token is not None})
-        elif path == "/api/live/stream":
-            self._stream(h)
         elif path == "/api/live/round" or path.startswith("/api/live/round/"):
             self._round(h, path[len("/api/live/round/"):])
         else:
@@ -634,7 +529,6 @@ class LiveMap:
     def _logout(self, h: Any, client: str, presented: list[str]) -> None:
         if self.access.revoke(presented):
             log.info("live: logout from %s", client)
-            self.hub.kick()
         _json(h, 200, {"authenticated": False},
               {"Set-Cookie": f"{COOKIE}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"})
 
@@ -737,63 +631,6 @@ class LiveMap:
             self._release()
             h.close_connection = True
             log.info("live: round stream closed from %s after %dm%02ds (%s)", client,
-                     *divmod(int(time.monotonic() - started), 60), reason)
-
-    def _stream(self, h: Any) -> None:
-        token = self.access.first_valid(cookie_values(h.headers))
-        if token is None:
-            _json(h, 401, {"error": "not logged in"})
-            return
-        client = client_key(h.headers, h.client_address[0])
-        admitted = self.hub.subscribe(MAX_STREAMS)
-        if admitted is None:
-            self._log_refused(client)
-            _json(h, 503, {"error": "too many live viewers"}, {"Retry-After": "30"})
-            return
-        cursor, wake, first = admitted
-        log.info("live: stream opened from %s (%d/%d)", client, self.hub.subscribers,
-                 MAX_STREAMS)
-        started = time.monotonic()
-        reason = "client gone"
-        try:
-            h.connection.settimeout(WRITE_TIMEOUT_SEC)
-            # HTTP/1.0 (the handler's default, never switched here): the body is
-            # delimited by the close, so neither Content-Length nor chunking.
-            h.send_response(200)
-            h.send_header("Content-Type", "text/event-stream; charset=utf-8")
-            h.send_header("Cache-Control", "no-store")
-            h.send_header("X-Accel-Buffering", "no")
-            h.send_header("Connection", "close")
-            h.end_headers()
-            h.wfile.write(f"retry: {RETRY_MS}\n\n".encode("ascii") + (first or b""))
-            last_write = time.monotonic()
-            while True:
-                idle = time.monotonic() - last_write
-                status, events, cursor, wake = self.hub.wait(
-                    cursor, wake, max(0.0, KEEPALIVE_SEC - idle))
-                if status == "closed":
-                    reason = "server stopping"
-                    break
-                if status == "gap":
-                    reason = "too slow"
-                    break
-                if not self.access.valid(token):
-                    reason = "session ended"
-                    break
-                if events:
-                    h.wfile.write(b"".join(payload for _s, _f, payload in pick(events)))
-                    last_write = time.monotonic()
-                elif time.monotonic() - last_write >= KEEPALIVE_SEC:
-                    h.wfile.write(b": ka\n\n")
-                    last_write = time.monotonic()
-        except TimeoutError:
-            reason = "write timeout"
-        except OSError:
-            reason = "client gone"
-        finally:
-            self.hub.unsubscribe()
-            h.close_connection = True
-            log.info("live: stream closed from %s after %dm%02ds (%s)", client,
                      *divmod(int(time.monotonic() - started), 60), reason)
 
     def _log_refused(self, client: str) -> None:

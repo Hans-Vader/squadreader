@@ -1097,8 +1097,6 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 log_tailer.drain(), snap.get("players") or [])
         line = json.dumps(snap, ensure_ascii=False) + "\n"
         beat.mark()
-        if live is not None:
-            live.publish(line, full=True)
         if out_f:
             out_f.write(line)
             out_f.flush()
@@ -1172,8 +1170,6 @@ def cmd_serve(args: argparse.Namespace) -> int:
                         pos = sample_positions(pm, paths, entities, tick, ts)
                         pos_line = json.dumps(pos, ensure_ascii=False) + "\n"
                         beat.mark()
-                        if live is not None:
-                            live.publish(pos_line, full=False)
                         if out_f:
                             out_f.write(pos_line)
                             out_f.flush()

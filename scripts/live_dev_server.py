@@ -130,7 +130,6 @@ def feed(live: LiveMap, stop: threading.Event, out_dir: Path, sqrx: Optional[Pat
         began = time.monotonic()
         for line, full in recording_lines(stop, sqrx) if sqrx else synthetic_lines(stop):
             state.writer.write_line(line)
-            live.publish(line + "\n", full=full)
             if full:
                 state.last_snap_ts = json.loads(line)["timestamp"]
                 state.first_snap_ts = state.first_snap_ts or state.last_snap_ts
@@ -175,8 +174,6 @@ def main() -> int:
     else:
         print(f"http://localhost:{args.port}/  (no live map)", file=sys.stderr)
     stop.wait()
-    if live is not None:
-        live.hub.close()
     srv.shutdown()
     return 0
 

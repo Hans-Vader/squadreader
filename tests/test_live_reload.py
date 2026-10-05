@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ import pytest
 import sqreader
 from live_helpers import PW, Stream, cookie, login, request, running
 from sqreader import live
+from sqreader.recorder import RecordingState
+from sqreader.sqrx import SqrxWriter
 
 NEW = "a-brand-new-password-for-mods"
 
@@ -116,7 +119,6 @@ def test_an_unresolvable_config_path_still_revokes_everyone(monkeypatch, caplog)
     lm = live.LiveMap(PW)
     _, token = lm.access.login(PW, "c", [])
     assert lm.access.valid(token)
-    cursor, wake, _ = lm.hub.subscribe(1)
 
     def cwd_is_gone():
         raise FileNotFoundError("the working directory was deleted")
@@ -125,7 +127,6 @@ def test_an_unresolvable_config_path_still_revokes_everyone(monkeypatch, caplog)
     lm.reload()
     assert not lm.access.valid(token)
     assert lm.access.login(PW, "c", [])[0] == "wrong"
-    assert lm.hub.wait(cursor, wake, 2)[3] != wake        # kicked: streams re-check
     assert _warning("live: SIGHUP: all sessions revoked; NO valid live_password in None "
                     "(FileNotFoundError), logins disabled until fixed") in caplog.record_tuples
     assert "the working directory was deleted" not in caplog.text    # the type, not the message
@@ -151,7 +152,6 @@ def test_sighup_fails_closed_inline_when_no_thread_can_start(monkeypatch):
     Out of threads, it revokes on the spot instead."""
     lm = live.LiveMap(PW)
     _, token = lm.access.login(PW, "c", [])
-    cursor, wake, _ = lm.hub.subscribe(1)
 
     def no_thread(self):
         raise RuntimeError("can't start new thread")
@@ -160,35 +160,39 @@ def test_sighup_fails_closed_inline_when_no_thread_can_start(monkeypatch):
     lm.on_sighup(1, None)                                  # must not raise
     assert not lm.access.valid(token)
     assert lm.access.login(PW, "c", [])[0] == "wrong"
-    assert lm.hub.wait(cursor, wake, 2)[3] != wake        # kicked: streams re-check
 
 
-def test_reload_ends_open_streams(tmp_path, monkeypatch):
+def test_reload_ends_open_round_streams(tmp_path, monkeypatch):
     _config(tmp_path, monkeypatch, json.dumps({"live_password": NEW}))
+    path = tmp_path / "r.sqrx"
+    state = RecordingState(match_id="m", writer=SqrxWriter(path, "srv"), path=path,
+                           started_at=datetime.now(timezone.utc))
+    state.writer.write_line(json.dumps({"timestamp": "2026-10-05T12:00:00+00:00", "tick": 1}))
     lm = live.LiveMap(PW)
+    lm.recording = lambda: state
     with running(lm) as port:
         _, token, _ = login(port)
-        st = Stream(port, token)
+        st = Stream(port, token, "/api/live/round/r")
         try:
             st.head()
-            st.event()
+            st.line()
             lm.reload()
             assert st.closed_within(2)
         finally:
             st.close()
+            state.writer.close()
 
 
 def test_cli_wires_the_live_map_into_serve():
     """Merge guard: upstream edits cmd_serve often, and a merge that drops one
-    of these lines leaves the live map silently dead or silently frozen."""
+    of these lines leaves the live map silently dead."""
     src = (Path(sqreader.__file__).parent / "cli.py").read_text(encoding="utf-8")
-    uses = ("live.publish(line, full=True)",
-            "live.publish(pos_line, full=False)",
-            'live.recording = lambda: record_state_box["current"]',
+    uses = ('live.recording = lambda: record_state_box["current"]',
             "signal.signal(signal.SIGHUP, live.on_sighup)")
     for needle in ('live = live_from_config(config.get("live_password"), recordings_dir)',
                    "live=live", *uses):
         assert needle in src, needle
+    assert "live.publish" not in src          # the SSE hub is gone; a merge must not revive it
     # A bare `live.<x>` would raise AttributeError in the public build, where
     # live is None: each use must stay behind its guard.
     for use in uses:

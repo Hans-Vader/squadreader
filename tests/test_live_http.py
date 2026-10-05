@@ -24,7 +24,7 @@ def _get(path):
 def test_without_a_password_the_live_paths_are_any_unknown_path(tmp_path):
     with running(None, recordings_dir=tmp_path) as port:
         unknown = without_date(raw(port, _get("/nope")))
-        for path in ("/api/live/session", "/api/live/stream", "/api/live/login"):
+        for path in ("/api/live/session", "/api/live/stream", "/api/live/login", "/api/live/round"):
             assert without_date(raw(port, _get(path))) == unknown, path
 
 
@@ -54,18 +54,18 @@ def test_with_a_password_post_elsewhere_is_byte_identical(tmp_path):
     assert on == off
 
 
-def test_invalid_config_disables_live_and_never_logs_the_value(caplog, monkeypatch):
+def test_invalid_config_disables_live_and_never_logs_the_value(caplog, monkeypatch, tmp_path):
     monkeypatch.delenv(live.ENV_HASH, raising=False)
     caplog.set_level("INFO", logger="sqreader.live")
-    assert live.live_from_config(None) is None
+    assert live.live_from_config(None, tmp_path) is None
     assert caplog.text == ""
-    assert live.live_from_config(" padded-secret ") is None
+    assert live.live_from_config(" padded-secret ", tmp_path) is None
     assert "live map disabled: live_password has leading or trailing whitespace" in caplog.text
     assert "padded-secret" not in caplog.text
-    assert isinstance(live.live_from_config(PW), live.LiveMap)
+    assert isinstance(live.live_from_config(PW, tmp_path), live.LiveMap)
     assert "live map enabled for moderators (password from live_password)" in caplog.text
     monkeypatch.setenv(live.ENV_HASH, "plain-secret-in-the-env")
-    assert live.live_from_config(PW) is None
+    assert live.live_from_config(PW, tmp_path) is None
     assert f"live map disabled: {live.ENV_HASH} must be a hash" in caplog.text
     assert "plain-secret-in-the-env" not in caplog.text
 

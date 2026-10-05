@@ -182,17 +182,16 @@ def test_cli_wires_the_live_map_into_serve():
     """Merge guard: upstream edits cmd_serve often, and a merge that drops one
     of these lines leaves the live map silently dead or silently frozen."""
     src = (Path(sqreader.__file__).parent / "cli.py").read_text(encoding="utf-8")
-    for needle in ('live = live_from_config(config.get("live_password"))',
-                   "live=live",
-                   "live.publish(line, full=True)",
-                   "live.publish(pos_line, full=False)",
-                   "signal.signal(signal.SIGHUP, live.on_sighup)"):
+    uses = ("live.publish(line, full=True)",
+            "live.publish(pos_line, full=False)",
+            'live.recording = lambda: record_state_box["current"]',
+            "signal.signal(signal.SIGHUP, live.on_sighup)")
+    for needle in ('live = live_from_config(config.get("live_password"), recordings_dir)',
+                   "live=live", *uses):
         assert needle in src, needle
-    # A bare `live.publish(...)` would raise AttributeError in every tick of the
-    # public build, where live is None: each use must stay behind its guard.
-    for use in ("live.publish(line, full=True)",
-                "live.publish(pos_line, full=False)",
-                "signal.signal(signal.SIGHUP, live.on_sighup)"):
+    # A bare `live.<x>` would raise AttributeError in the public build, where
+    # live is None: each use must stay behind its guard.
+    for use in uses:
         assert re.search(rf"if live is not None:\s*{re.escape(use)}", src), \
             f"{use} lost its `if live is not None:` guard"
 

@@ -26,10 +26,17 @@ import secrets
 import sys
 import threading
 import time
+import urllib.parse
+import zlib
 from collections import deque
+from collections.abc import Callable
 from typing import Any, Optional
 
+import zstandard as zstd
+
 from .config import config_path
+from .httpsrv import _replay_from
+from .sqrx import SqrxReader
 
 log = logging.getLogger("sqreader.live")
 
@@ -45,6 +52,7 @@ RING_SIZE = 128
 KEEPALIVE_SEC = 15.0
 RETRY_MS = 3000
 WRITE_TIMEOUT_SEC = 20.0
+POLL_SEC = 0.25                   # at the end of a round's file: look again after this
 REFUSED_LOG_INTERVAL_SEC = 60.0
 MAX_COOKIE_VALUES = 8             # sqr_live values read from one request
 
@@ -456,12 +464,52 @@ def _read_body(h: Any) -> Optional[bytes]:
 
 
 
+def round_meta(state: Any) -> dict:
+    """What the viewer needs to draw the timeline of the round being recorded."""
+    started = state.first_snap_ts or state.started_at.isoformat()
+    return {"id": state.path.stem, "startedAtUtc": started,
+            "latestUtc": state.last_snap_ts or started, "durationSec": 0}
+
+
+class _Tail:
+    """The round's recording, read the way `tail -f` reads a file.
+
+    zstd's stream reader pulls its bytes from here. At the end of the file this
+    waits for the recorder's next frame instead of reporting the end, so a
+    frame the recorder is halfway through writing is simply finished on a
+    later poll. Only once `alive()` says the round is over, or the viewer may
+    no longer watch, does it report the end, after one last read for a frame
+    written in between.
+    """
+
+    def __init__(self, f: Any, alive: Callable[[], bool]) -> None:
+        self._f = f
+        self._alive = alive
+
+    def read(self, n: int = -1) -> bytes:
+        while True:
+            data = self._f.read(n)
+            if data:
+                return data
+            if not self._alive():
+                return self._f.read(n)
+            time.sleep(POLL_SEC)
+
+    def close(self) -> None:
+        self._f.close()
+
+
 class LiveMap:
     """The /api/live/* endpoints, fed by the reader through publish()."""
 
     def __init__(self, password: str) -> None:
         self.hub = Hub()
         self.access = Access(password)
+        # The round being recorded (recorder.RecordingState) or None; cli.py
+        # points this at record_state_box["current"].
+        self.recording: Callable[[], Any] = lambda: None
+        self._streams_lock = threading.Lock()
+        self._streams = 0
         self._refused_lock = threading.Lock()
         self._refused_at = float("-inf")      # monotonic time of the last refusal log
 
@@ -535,6 +583,8 @@ class LiveMap:
             _json(h, 200, {"authenticated": token is not None})
         elif path == "/api/live/stream":
             self._stream(h)
+        elif path == "/api/live/round" or path.startswith("/api/live/round/"):
+            self._round(h, path[len("/api/live/round/"):])
         else:
             h.send_error(404, "no such endpoint")
 
@@ -587,6 +637,107 @@ class LiveMap:
             self.hub.kick()
         _json(h, 200, {"authenticated": False},
               {"Set-Cookie": f"{COOKIE}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"})
+
+    def _round(self, h: Any, rest: str) -> None:
+        """GET /api/live/round[/<id>[/meta]]. The session comes first, so a
+        stranger cannot even tell whether a round is being recorded."""
+        token = self.access.first_valid(cookie_values(h.headers))
+        if token is None:
+            _json(h, 401, {"error": "not logged in"})
+            return
+        state = self.recording()
+        rid, _, tail = rest.partition("/")
+        # The id is only ever compared, never used to find a file: there is one
+        # round to serve, and it is the recorder's.
+        if state is None or (rest and (urllib.parse.unquote(rid) != state.path.stem
+                                       or tail not in ("", "meta"))):
+            _json(h, 404, {"error": "no round in progress"})
+        elif not rest or tail == "meta":
+            _json(h, 200, round_meta(state))
+        else:
+            self._follow(h, token, state)
+
+    def _admit(self) -> Optional[int]:
+        """Take a stream slot: how many are open now, or None if all are taken."""
+        with self._streams_lock:
+            if self._streams >= MAX_STREAMS:
+                return None
+            self._streams += 1
+            return self._streams
+
+    def _release(self) -> None:
+        with self._streams_lock:
+            self._streams -= 1
+
+    def _follow(self, h: Any, token: str, state: Any) -> None:
+        """The round's frames from `from` on, then each new one as the recorder
+        appends it, until the round ends or the session does."""
+        client = client_key(h.headers, h.client_address[0])
+        try:
+            reader = SqrxReader(state.path)
+        except (OSError, ValueError):             # gone between the lookup and here
+            _json(h, 404, {"error": "no round in progress"})
+            return
+        n = self._admit()
+        if n is None:
+            reader.close()
+            self._log_refused(client)
+            _json(h, 503, {"error": "too many live viewers"}, {"Retry-After": "30"})
+            return
+        try:
+            from_ms = int((h._query().get("from") or ["0"])[0])
+        except ValueError:
+            from_ms = 0
+        # Never zstd passthrough: the file is still growing, and `from` drops lines.
+        gz = (zlib.compressobj(6, zlib.DEFLATED, 31)
+              if h._negotiate_encoding(allow_zstd=False) == "gzip" else None)
+        reason = "round ended"
+
+        def alive() -> bool:
+            nonlocal reason
+            if not self.access.valid(token):
+                reason = "session ended"
+                return False
+            return self.recording() is state
+
+        log.info("live: round stream opened from %s (%d/%d)", client, n, MAX_STREAMS)
+        started = time.monotonic()
+        try:
+            h.connection.settimeout(WRITE_TIMEOUT_SEC)
+            # HTTP/1.0 (the handler's default, never switched here): the body is
+            # delimited by the close, so neither Content-Length nor chunking.
+            h.send_response(200)
+            h.send_header("Content-Type", "application/x-ndjson")
+            h.send_header("Cache-Control", "no-store")
+            h.send_header("X-Accel-Buffering", "no")
+            h.send_header("Connection", "close")
+            if gz:
+                h.send_header("Content-Encoding", "gzip")
+            h.end_headers()
+            reader._f = _Tail(reader._f, alive)  # type: ignore[assignment]  # read/close suffice
+            lines = reader.lines()
+            for line in _replay_from(lines, from_ms) if from_ms > 0 else lines:
+                # Per line too: a long backlog never reaches the end of the file,
+                # where _Tail looks, and a logout must not wait for it.
+                if not self.access.valid(token):
+                    reason = "session ended"
+                    break
+                data = line.encode("utf-8") + b"\n"
+                h.wfile.write(gz.compress(data) + gz.flush(zlib.Z_SYNC_FLUSH) if gz else data)
+            if gz:
+                h.wfile.write(gz.flush())
+        except TimeoutError:
+            reason = "write timeout"
+        except OSError:
+            reason = "client gone"
+        except zstd.ZstdError:
+            reason = "bad data"
+        finally:
+            reader.close()
+            self._release()
+            h.close_connection = True
+            log.info("live: round stream closed from %s after %dm%02ds (%s)", client,
+                     *divmod(int(time.monotonic() - started), 60), reason)
 
     def _stream(self, h: Any) -> None:
         token = self.access.first_valid(cookie_values(h.headers))
@@ -655,13 +806,17 @@ class LiveMap:
                     MAX_STREAMS, MAX_STREAMS)
 
 
-def live_from_config(value: Any) -> Optional[LiveMap]:
+def live_from_config(value: Any, recordings_dir: Any) -> Optional[LiveMap]:
     """The live map for this config value (or the environment's hash), or None,
-    and then it does not exist."""
+    and then it does not exist. It plays the round being recorded, so without
+    recordings there is nothing to show."""
     secret, reason, source = password_from(value)
     if secret is None:
         if reason:
             log.warning("live map disabled: %s %s", source, reason)
+        return None
+    if recordings_dir is None:
+        log.warning("live map disabled: it needs --recordings-dir")
         return None
     log.info("live map enabled for moderators (password from %s)", source)
     return LiveMap(secret)

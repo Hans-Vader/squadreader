@@ -99,16 +99,16 @@ def wait_for(pred, timeout=3):
 
 
 class Stream:
-    """One open GET /api/live/stream, read incrementally."""
+    """One open GET on a streaming endpoint, read incrementally from a raw socket."""
 
-    def __init__(self, port, token, rcvbuf=None):
+    def __init__(self, port, token, path="/api/live/stream", rcvbuf=None, headers=""):
         self.s = socket.socket()
         if rcvbuf:
             self.s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, rcvbuf)
         self.s.settimeout(5)
         self.s.connect(("127.0.0.1", port))
         hdr = f"Cookie: {live.COOKIE}={token}\r\n" if token else ""
-        self.s.sendall(f"GET /api/live/stream HTTP/1.1\r\nHost: t\r\n{hdr}\r\n".encode())
+        self.s.sendall(f"GET {path} HTTP/1.1\r\nHost: t\r\n{hdr}{headers}\r\n".encode())
         self.buf = b""
 
     def _until(self, marker, timeout):
@@ -133,6 +133,9 @@ class Stream:
 
     def event(self, timeout=5):
         return self._until(b"\n\n", timeout)
+
+    def line(self, timeout=5):
+        return self._until(b"\n", timeout)
 
     def closed_within(self, seconds):
         # `seconds` is a TOTAL deadline, not a per-recv timeout: a stream that keeps

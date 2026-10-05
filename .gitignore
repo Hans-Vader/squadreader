@@ -81,3 +81,6 @@ build/
 # filenames. The result installs as a blank page. Re-include it explicitly.
 !frontend/dist/
 !frontend/dist/**
+
+# SDD execution scratch (ledger, briefs, review packages)
+.superpowers/

@@ -1,6 +1,6 @@
-// Standalone unit test for the live stream decoder. Bundled with esbuild and
+// Standalone unit test for the live map's client side. Bundled with esbuild and
 // run under node, no framework (matches replayReconstruct.test.mts).
-import { createLiveFeed, edgeStep, isAtLive, retryAfterMinutes, shouldAdvanceRound } from "./client.ts";
+import { edgeStep, isAtLive, retryAfterMinutes, shouldAdvanceRound } from "./client.ts";
 import { isLiveId, LIVE_DELAY_MS, recordingUrl } from "../api/recordings.ts";
 
 let passed = 0, failed = 0;
@@ -9,52 +9,6 @@ function ok(cond: any, msg: string) {
 }
 function eq(a: any, b: any, msg: string) {
   ok(a === b, `${msg} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`);
-}
-
-const full = (tick: number, x: number) => JSON.stringify({
-  timestamp: `2026-01-01T00:00:0${tick}+00:00`, tick,
-  players: [{ name: "Alice", eosId: "eos-a", teamId: 1,
-              soldier: { addr: "0x1", position: { x, y: 0, z: 0 }, health: 100, yaw: 0 } }],
-  vehicles: [], damageEvents: [{ killed: true }], gameState: { matchState: "InProgress" },
-});
-const pos = (tick: number, x: number) => JSON.stringify({
-  t: "pos", tick, timestamp: `2026-01-01T00:00:0${tick}.5+00:00`,
-  players: [{ id: "eos-a", x, y: 0 }], vehicles: [],
-});
-
-// 1. Garbage and non-objects are dropped.
-{
-  const f = createLiveFeed();
-  eq(f.push("not json"), null, "garbage dropped");
-  eq(f.push("[1,2]"), null, "array dropped");
-  eq(f.push("42"), null, "number dropped");
-  eq(f.push("null"), null, "null dropped");
-}
-
-// 2. A position frame before the first full frame is dropped.
-{
-  const f = createLiveFeed();
-  eq(f.push(pos(1, 5)), null, "orphan position frame dropped");
-}
-
-// 3. Full frames pass through; position frames after them move players and
-//    carry no kill events (those were delivered on the full frame).
-{
-  const f = createLiveFeed();
-  const a = f.push(full(1, 10));
-  eq(a?.tick, 1, "full frame returned");
-  eq(a?.damageEvents.length, 1, "full frame keeps its kill events");
-  const b = f.push(pos(2, 12));
-  eq(b?.players[0]?.soldier?.position?.x, 12, "position frame moves Alice");
-  eq(b?.damageEvents.length, 0, "position frame carries no kill events");
-}
-
-// 4. A new feed (a reconnect) starts without a base frame.
-{
-  const f1 = createLiveFeed();
-  f1.push(full(1, 10));
-  const f2 = createLiveFeed();
-  eq(f2.push(pos(2, 12)), null, "fresh feed has no base frame");
 }
 
 // 5. Retry-After seconds become whole minutes for the message.

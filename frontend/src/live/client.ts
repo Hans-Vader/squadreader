@@ -1,7 +1,5 @@
 // Moderator live map: the few server calls and the rules of the live edge.
 // Fork-only; see docs/superpowers/specs/2026-10-05-live-replay-design.md.
-import type { Snapshot } from "../state/types";
-import { ReplayReconstructor, type RecordingLine } from "../state/replayReconstruct";
 import { LIVE_DELAY_MS } from "../api/recordings";
 
 // off = the server has no live map (404), anon = logged out, ok = logged in,
@@ -122,22 +120,4 @@ export function isAtLive(playing: boolean, lagMs: number): boolean {
 export function shouldAdvanceRound(frameCount: number, currentIdx: number,
                                    playing: boolean): boolean {
   return frameCount === 0 || (!playing && currentIdx >= frameCount - 1);
-}
-
-export interface LiveFeed {
-  push(data: string): Snapshot | null;
-}
-
-// One per connection: the stream always starts with a full frame, and the
-// reconstructor folds the 4 Hz position frames onto the last one.
-export function createLiveFeed(): LiveFeed {
-  const recon = new ReplayReconstructor();
-  return {
-    push(data: string): Snapshot | null {
-      let v: unknown;
-      try { v = JSON.parse(data); } catch { return null; }
-      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-      return recon.push(v as RecordingLine);
-    },
-  };
 }

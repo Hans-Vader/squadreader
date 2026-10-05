@@ -49,6 +49,8 @@ services:
       SQREADER_LOG_LEVEL: ${SQREADER_LOG_LEVEL:-INFO}
       # Only for a config file mounted somewhere OTHER than /app.
       SQREADER_CONFIG: ${SQREADER_CONFIG:-}
+      # Moderator live map: a HASH from `python3 -m sqreader.live hash` (docs/live-map.md).
+      SQREADER_LIVE_PASSWORD_HASH: ${SQREADER_LIVE_PASSWORD_HASH:-}
       RETENTION_INTERVAL: ${RETENTION_INTERVAL:-86400}
       RETENTION_MAX_AGE_DAYS: ${RETENTION_MAX_AGE_DAYS:-90}
       RETENTION_MAX_TOTAL_GB: ${RETENTION_MAX_TOTAL_GB:-150}

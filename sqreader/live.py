@@ -14,13 +14,16 @@ Design: docs/superpowers/specs/2026-09-29-live-moderation-design.md
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import ipaddress
 import json
 import logging
 import math
+import os
 import secrets
+import sys
 import threading
 import time
 from collections import deque
@@ -30,7 +33,6 @@ from .config import config_path
 
 log = logging.getLogger("sqreader.live")
 
-MIN_PASSWORD_LEN = 20
 SESSION_TTL_SEC = 43200           # 12 h, absolute; never extended
 MAX_SESSIONS = 32
 BODY_MAX = 1024                   # bytes of a login/logout body
@@ -48,25 +50,84 @@ MAX_COOKIE_VALUES = 8             # sqr_live values read from one request
 
 COOKIE = "sqr_live"
 
-_TOO_SHORT = ("live map disabled: live_password must be a string of at least "
-              f"{MIN_PASSWORD_LEN} characters")
-_PADDED = "live map disabled: live_password has leading or trailing whitespace"
+ENV_HASH = "SQREADER_LIVE_PASSWORD_HASH"
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2**14, 8, 1
+
+# Reasons a value is unusable. They never contain the value, which is a
+# credential; the caller puts the name of where it came from in front.
+_NOT_STR = "must be a string"
+_PADDED = "has leading or trailing whitespace"
+_BAD_HASH = "is not a valid scrypt hash"
+_NOT_HASH = "must be a hash from `python3 -m sqreader.live hash`"
 
 
-def validate_password(value: Any) -> tuple[Optional[str], Optional[str]]:
-    """(password, None) if usable, (None, reason) if not, (None, None) if unset.
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
-    The reason never contains the value: it is a credential.
+
+def _unb64(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def hash_password(password: str, salt: Optional[bytes] = None) -> str:
+    """scrypt:<n>:<r>:<p>:<salt>:<key>, base64url without padding.
+
+    No `$` anywhere: Compose expands it in an .env file.
+    """
+    salt = secrets.token_bytes(16) if salt is None else salt
+    key = hashlib.scrypt(password.encode("utf-8", "surrogatepass"), salt=salt,
+                         n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
+    return f"scrypt:{SCRYPT_N}:{SCRYPT_R}:{SCRYPT_P}:{_b64(salt)}:{_b64(key)}"
+
+
+def parse_hash(value: str) -> Optional[tuple[int, int, int, bytes, bytes]]:
+    """(n, r, p, salt, key) of a well-formed hash at a sane cost, else None.
+
+    The cost caps keep a typo from asking scrypt for gigabytes at every login.
+    """
+    parts = value.split(":")
+    if len(parts) != 6 or parts[0] != "scrypt":
+        return None
+    try:
+        n, r, p = (int(x) for x in parts[1:4])
+        salt, key = _unb64(parts[4]), _unb64(parts[5])
+    except ValueError:                    # binascii.Error is a ValueError
+        return None
+    if not (2 <= n <= 2**20 and n & (n - 1) == 0 and 1 <= r <= 16 and 1 <= p <= 4
+            and 128 * n * r <= 2**28 and len(salt) >= 16 and len(key) == 32):
+        return None
+    return n, r, p, salt, key
+
+
+def validate_password(value: Any, *,
+                      hash_only: bool = False) -> tuple[Optional[str], Optional[str]]:
+    """(secret, None) if usable, (None, reason) if not, (None, None) if unset.
+
+    The secret is a scrypt hash, or a plain password of any length unless
+    `hash_only`. The reason never contains the value: it is a credential.
     """
     if value is None or value == "":
         return None, None
     if not isinstance(value, str):
-        return None, _TOO_SHORT
+        return None, _NOT_STR
     if value != value.strip():
         return None, _PADDED
-    if len(value) < MIN_PASSWORD_LEN:
-        return None, _TOO_SHORT
+    if value.startswith("scrypt:"):
+        return (value, None) if parse_hash(value) else (None, _BAD_HASH)
+    if hash_only:
+        return None, _NOT_HASH
     return value, None
+
+
+def password_from(config_value: Any) -> tuple[Optional[str], Optional[str], str]:
+    """(secret, reason, source): a non-empty SQREADER_LIVE_PASSWORD_HASH wins over
+    live_password, and only a hash may stand there."""
+    env = os.environ.get(ENV_HASH)
+    if env:
+        secret, reason = validate_password(env, hash_only=True)
+        return secret, reason, ENV_HASH
+    secret, reason = validate_password(config_value)
+    return secret, reason, "live_password"
 
 
 def _digest(text: str) -> bytes:
@@ -120,25 +181,24 @@ def cookie_values(headers: Any) -> list[str]:
 
 
 class Access:
-    """The shared password and the sessions it grants. One lock guards both."""
+    """The shared password (or its hash) and the sessions it grants. One lock guards both."""
 
-    def __init__(self, password: Optional[str]) -> None:
+    def __init__(self, secret: Optional[str]) -> None:
         self._lock = threading.Lock()
-        self._digest: Optional[bytes] = _digest(password) if password else None
+        self._secret = secret
         # token -> monotonic expiry
         self._sessions: dict[str, float] = {}
         self._fails: deque[tuple[float, str]] = deque()      # (monotonic time, client)
 
-    def reset(self, password: Optional[str]) -> bool:
-        """A new password (None: nobody can log in) and no sessions at all.
+    def reset(self, secret: Optional[str]) -> bool:
+        """A new secret (None: nobody can log in) and no sessions at all.
 
-        True if that changed the stored password, "no password" counting as a
+        True if that changed the stored secret, "no password" counting as a
         value of its own. The sessions are gone either way.
         """
-        new = _digest(password) if password else None
         with self._lock:
-            changed = new != self._digest
-            self._digest = new
+            changed = secret != self._secret
+            self._secret = secret
             self._sessions.clear()
         return changed
 
@@ -227,9 +287,17 @@ class Access:
         return found
 
     def _check(self, given: str) -> bool:                     # caller holds the lock
-        if self._digest is None:
+        # scrypt under the lock (~50 ms) serialises logins, which together with
+        # the throttle also bounds what a flood of them costs.
+        if self._secret is None:
             return False
-        return hmac.compare_digest(_digest(given), self._digest)
+        parsed = parse_hash(self._secret) if self._secret.startswith("scrypt:") else None
+        if parsed is None:
+            return hmac.compare_digest(_digest(given), _digest(self._secret))
+        n, r, p, salt, key = parsed
+        got = hashlib.scrypt(given.encode("utf-8", "surrogatepass"), salt=salt,
+                             n=n, r=r, p=p, maxmem=2**29, dklen=len(key))
+        return hmac.compare_digest(got, key)
 
     def _new_session(self, now: float) -> str:               # caller holds the lock
         self._sessions = {t: e for t, e in self._sessions.items() if e > now}
@@ -415,15 +483,25 @@ class LiveMap:
             self.hub.kick()
 
     def reload(self) -> None:
-        """Revoke every session and re-read live_password. Fails closed: a file
+        """Revoke every session and re-read the password. Fails closed: a file
         that cannot be read, or holds no valid password, disables logins.
 
-        The log says which of the three happened. A file that still holds the
-        old password (a Docker single-file bind mount keeps serving the old
-        inode after an editor replaced the file) is reported as UNCHANGED, and a
-        failure names its reason: an error TYPE or a rule, never a message, which
-        could quote the file, and never the value.
+        A hash in SQREADER_LIVE_PASSWORD_HASH wins, as at startup. The
+        environment of a running process never changes, so then this only
+        revokes, and says so. Otherwise the log says which of three things
+        happened. A file that still holds the old password (a Docker
+        single-file bind mount keeps serving the old inode after an editor
+        replaced the file) is reported as UNCHANGED, and a failure names its
+        reason: an error TYPE or a rule, never a message, which could quote the
+        file, and never the value.
         """
+        env = os.environ.get(ENV_HASH)
+        if env:
+            self.access.reset(validate_password(env, hash_only=True)[0])
+            self.hub.kick()
+            log.warning("live: SIGHUP: all sessions revoked; password from %s is UNCHANGED "
+                        "(environment: change it with a restart between rounds)", ENV_HASH)
+            return
         path = None
         why = None
         try:
@@ -437,8 +515,7 @@ class LiveMap:
             why = type(exc).__name__
         password, reason = validate_password(value)
         if password is None and why is None:
-            why = (reason.removeprefix("live map disabled: ") if reason
-                   else "live_password is not set")
+            why = f"live_password {reason}" if reason else "live_password is not set"
         changed = self.access.reset(password)
         self.hub.kick()
         if password is None:
@@ -577,11 +654,35 @@ class LiveMap:
 
 
 def live_from_config(value: Any) -> Optional[LiveMap]:
-    """The live map for this config value, or None, and then it does not exist."""
-    password, reason = validate_password(value)
-    if password is None:
+    """The live map for this config value (or the environment's hash), or None,
+    and then it does not exist."""
+    secret, reason, source = password_from(value)
+    if secret is None:
         if reason:
-            log.warning("%s", reason)
+            log.warning("live map disabled: %s %s", source, reason)
         return None
-    log.info("live map enabled for moderators (login via ?mode=live)")
-    return LiveMap(password)
+    log.info("live map enabled for moderators (password from %s)", source)
+    return LiveMap(secret)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """`python3 -m sqreader.live hash`: print the hash for SQREADER_LIVE_PASSWORD_HASH
+    (or live_password). Asks twice, never echoes, never prints the password."""
+    import getpass
+    args = sys.argv[1:] if argv is None else argv
+    if args != ["hash"]:
+        print("usage: python3 -m sqreader.live hash", file=sys.stderr)
+        return 2
+    first = getpass.getpass("live map password: ")
+    if getpass.getpass("again: ") != first:
+        print("the two entries differ", file=sys.stderr)
+        return 1
+    if not first or first != first.strip() or first.startswith("scrypt:"):
+        print("unusable: empty, padded with whitespace, or a hash already", file=sys.stderr)
+        return 1
+    print(hash_password(first))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -60,8 +60,9 @@ def test_reloading_the_same_password_says_unchanged(tmp_path, monkeypatch, caplo
 
 @pytest.mark.parametrize("content, why", [
     ("{not json", "JSONDecodeError"),
-    (json.dumps({"live_password": "short"}),
-     "live_password must be a string of at least 20 characters"),
+    (json.dumps({"live_password": " padded "}),
+     "live_password has leading or trailing whitespace"),
+    (json.dumps({"live_password": "scrypt:nope"}), "live_password is not a valid scrypt hash"),
     (json.dumps({}), "live_password is not set"),
     (json.dumps(["x"]), "live_password is not set"),
 ])
@@ -73,6 +74,20 @@ def test_a_broken_config_fails_closed_and_says_why(tmp_path, monkeypatch, caplog
         assert login(port, PW)[0] == 401
     assert _warning(f"live: SIGHUP: all sessions revoked; NO valid live_password in {path} "
                     f"({why}), logins disabled until fixed") in caplog.record_tuples
+
+
+def test_sighup_with_an_environment_hash_revokes_and_keeps_it(monkeypatch, caplog):
+    h = live.hash_password(PW)
+    monkeypatch.setenv(live.ENV_HASH, h)
+    monkeypatch.setenv("SQREADER_CONFIG", "/nonexistent/never-read.json")
+    lm = live.LiveMap(h)
+    _, token = lm.access.login(PW, "c", [])
+    lm.reload()
+    assert not lm.access.valid(token)
+    assert lm.access.login(PW, "c", [])[0] == "ok"
+    assert _warning(f"live: SIGHUP: all sessions revoked; password from {live.ENV_HASH} is "
+                    "UNCHANGED (environment: change it with a restart between rounds)"
+                    ) in caplog.record_tuples
 
 
 def test_the_log_names_the_error_type_and_never_its_message(tmp_path, monkeypatch, caplog):

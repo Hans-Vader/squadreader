@@ -54,15 +54,20 @@ def test_with_a_password_post_elsewhere_is_byte_identical(tmp_path):
     assert on == off
 
 
-def test_invalid_config_disables_live_and_never_logs_the_value(caplog):
+def test_invalid_config_disables_live_and_never_logs_the_value(caplog, monkeypatch):
+    monkeypatch.delenv(live.ENV_HASH, raising=False)
     caplog.set_level("INFO", logger="sqreader.live")
     assert live.live_from_config(None) is None
     assert caplog.text == ""
-    assert live.live_from_config("too-short-secret") is None
-    assert "at least 20 characters" in caplog.text
-    assert "too-short-secret" not in caplog.text
+    assert live.live_from_config(" padded-secret ") is None
+    assert "live map disabled: live_password has leading or trailing whitespace" in caplog.text
+    assert "padded-secret" not in caplog.text
     assert isinstance(live.live_from_config(PW), live.LiveMap)
-    assert "live map enabled for moderators (login via ?mode=live)" in caplog.text
+    assert "live map enabled for moderators (password from live_password)" in caplog.text
+    monkeypatch.setenv(live.ENV_HASH, "plain-secret-in-the-env")
+    assert live.live_from_config(PW) is None
+    assert f"live map disabled: {live.ENV_HASH} must be a hash" in caplog.text
+    assert "plain-secret-in-the-env" not in caplog.text
 
 
 def test_legacy_live_paths_stay_404_with_live_enabled(tmp_path):

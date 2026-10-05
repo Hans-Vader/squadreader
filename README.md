@@ -306,6 +306,57 @@ built-in default**, so every value can also be passed on the command line.
 Output directories are `serve`/`record` flags (`--recordings-dir`, `--stats-db`,
 `--icons-dir`, `--sqmaps-dir`, `--frontend-dir`) and default next to the repo.
 Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
+Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
+
+### Modded / Steam Workshop maps
+
+The bundled map table covers the stock layers. A workshop map is not in it, so
+the recorder attaches no layer to its frames and the viewer draws a bare grid —
+everything else (players, vehicles, markers, kill feed, stats) works as normal.
+
+To give a modded map its minimap, add it to `data/static/custom_maps.json`
+(create it; it is optional and loaded only if present):
+
+```json
+{
+  "Hrodna Border": {
+    "texture":     "HrodnaBorder",
+    "topLeft":     { "x": -200000, "y": -200000 },
+    "bottomRight": { "x":  200000, "y":  200000 }
+  }
+}
+```
+
+Then drop the minimap image next to the stock ones as
+`sqmaps/HrodnaBorder.webp` (`.png`, `.jpg` also work).
+
+- **The key is the MAP name, not the layer name** — one entry covers every
+  RAAS/AAS/Invasion/Seed layer of that mod. Matching ignores case, spaces and
+  underscores and tolerates a community tag in front, so `Hrodna Border` finds
+  both `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more
+  specific key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys
+  under three characters are ignored so a typo cannot swallow unrelated maps.
+- **`texture` is the filename without extension** and must match
+  `[A-Za-z0-9_-]+` — no spaces.
+- **`topLeft`/`bottomRight` are the minimap's world corners in centimetres.**
+  The SDK requires them to form a square. Ask the mod author for the exact
+  values; failing that, a centred square of the advertised map size is a good
+  first guess (4 km → `±200000`), then check a replay and adjust.
+
+An entry that is missing its corners, or whose `texture` the server would
+refuse, is dropped with a warning at startup rather than used — a half-written
+entry hides the map the viewer would otherwise have guessed. Changes are read at
+startup, so restart the reader. In Docker both files are baked into the image
+(`COPY . /app`) — rebuild after adding a map.
+
+Known gaps:
+
+- **RAAS capture zones stay unrendered on modded maps.** Their static geometry
+  comes from SquadCalc, which does not carry workshop layers. AAS layers are
+  unaffected — there the live capture zones carry their own positions.
+- **Overriding a stock layer** (by naming it exactly) replaces its extent but
+  not its capture-zone geometry, which stays in the stock layer's coordinates.
+  Expect the flags to sit wrong unless the new bounds match the old ones.
 
 ## What data it collects and where it writes
 
@@ -331,6 +382,7 @@ See [PRIVACY.md](PRIVACY.md) for what is stored, how long, and how to delete it.
 - **Squad-version-specific.** Memory offsets are reverse-engineered for Squad v10.4 / SDK v10.4.1. A Squad update can move them — `sqreader doctor` re-verifies every offset against the live binary and reports drift, and startup discovery self-heals the two anchor addresses; a larger layout change needs new offsets.
 - **Anti-cheat detectors have blind spots.** They flag only memory-verified signals (no guessing), so many cheat classes are simply not detectable this way.
 - **One game server per reader instance.**
+- **Modded maps need a hand-written entry.** Bounds and minimap for a workshop map cannot be derived from the game; see [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
 
 ## Legal
 

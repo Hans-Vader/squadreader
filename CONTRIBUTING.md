@@ -21,8 +21,16 @@ Run the same gate CI runs:
 python -m pytest           # unit tests
 python -m ruff check .     # lint
 python -m mypy sqreader    # types
-# only if you touched the web UI:
+# only if you touched the web UI — and COMMIT the rebuilt frontend/dist with
+# your change: the prebuilt bundle is what every install and the Docker image
+# serve, so a fix that lands only in frontend/src reaches nobody.
 cd frontend && npm ci && npm run build
+```
+
+No Node on the box? Same build, from the repo root, in a throwaway container:
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/frontend:/fe" -w /fe node:22-slim sh -c 'npm ci && npm run build'
 ```
 
 Please keep the project conventions:

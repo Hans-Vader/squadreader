@@ -49,6 +49,11 @@ def test_a_hash_logs_in_with_its_password_only():
     a = live.Access(h)
     assert a.login(WRONG, "c", []) == ("wrong", None)
     assert a.login(PW, "c", [])[0] == "ok"
+    assert a.login(h, "c", []) == ("wrong", None)  # the hash string is not the password
+
+
+def test_an_unparsable_stored_hash_lets_nobody_in():
+    assert live.Access("scrypt:broken").login("scrypt:broken", "c", []) == ("wrong", None)
 
 
 def test_hashes_are_salted():
@@ -69,6 +74,7 @@ GOOD = live.hash_password(PW, salt=b"s" * 16)
     GOOD.replace(":8:1:", ":8:5:"),                    # p too large
     GOOD.replace(":8:1:", ":x:1:"),                    # not a number
     GOOD[:-4],                                         # key too short
+    GOOD.replace(":16384:8:", f":{2**16}:1:"),         # OpenSSL wants n < 2**(16*r)
 ])
 def test_broken_or_costly_hashes_are_rejected(value):
     assert live.validate_password(value) == (None, live._BAD_HASH)

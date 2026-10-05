@@ -94,7 +94,7 @@ def parse_hash(value: str) -> Optional[tuple[int, int, int, bytes, bytes]]:
     except ValueError:                    # binascii.Error is a ValueError
         return None
     if not (2 <= n <= 2**20 and n & (n - 1) == 0 and 1 <= r <= 16 and 1 <= p <= 4
-            and 128 * n * r <= 2**28 and len(salt) >= 16 and len(key) == 32):
+            and 128 * n * r <= 2**28 and n < 2**(16 * r) and len(salt) >= 16 and len(key) == 32):
         return None
     return n, r, p, salt, key
 
@@ -291,9 +291,11 @@ class Access:
         # the throttle also bounds what a flood of them costs.
         if self._secret is None:
             return False
-        parsed = parse_hash(self._secret) if self._secret.startswith("scrypt:") else None
-        if parsed is None:
+        if not self._secret.startswith("scrypt:"):
             return hmac.compare_digest(_digest(given), _digest(self._secret))
+        parsed = parse_hash(self._secret)
+        if parsed is None:                    # fail closed: a hash is never a password
+            return False
         n, r, p, salt, key = parsed
         got = hashlib.scrypt(given.encode("utf-8", "surrogatepass"), salt=salt,
                              n=n, r=r, p=p, maxmem=2**29, dklen=len(key))

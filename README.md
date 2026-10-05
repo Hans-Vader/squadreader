@@ -11,6 +11,15 @@ This is a fork of
 [cagrianilokumus/squadreader](https://github.com/cagrianilokumus/squadreader).
 It follows upstream and adds:
 
+- **A live map for moderators, the main reason this fork exists.** Upstream
+  ships no live view, because a map of both teams in real time lets players
+  ghost. Here it is back behind a shared password, for moderators only. The
+  running round plays like a live stream in the replay player: the timeline
+  reaches back to the start of the round, a LIVE button returns to the newest
+  frame, and the next round opens by itself. Logins are throttled, SIGHUP ends
+  every session, and the password can be a scrypt hash in the environment.
+  Without a password the server is the public build, byte for byte. See
+  [docs/live-map.md](docs/live-map.md).
 - **Minimaps for modded and Steam Workshop maps.** Upstream's map table only
   knows the stock layers, so a workshop map plays back over a bare grid. Here an
   entry in `data/static/custom_maps.json` and an image in `sqmaps/` fill that

@@ -8,6 +8,25 @@ import {
   ReplayUnpacker,
 } from "../state/replayUnpack";
 
+/**
+ * A live round's id in the viewer store. A real recording's id never has an
+ * "@" (httpsrv._REC_ID_RE), so the two can never be confused.
+ */
+export const LIVE_ID_PREFIX = "@live:";
+/** How far behind the newest recorded frame "live" plays. */
+export const LIVE_DELAY_MS = 8000;
+
+export function isLiveId(id: string | null | undefined): id is string {
+  return !!id && id.startsWith(LIVE_ID_PREFIX);
+}
+
+/** Where a recording's frames come from, and with "/meta" its timing. */
+export function recordingUrl(id: string): string {
+  return isLiveId(id)
+    ? `./api/live/round/${encodeURIComponent(id.slice(LIVE_ID_PREFIX.length))}`
+    : `./api/recording/${encodeURIComponent(id)}`;
+}
+
 export async function listRecordings(): Promise<RecordingMeta[]> {
   const r = await fetch("./api/recordings", { cache: "no-store" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -15,7 +34,7 @@ export async function listRecordings(): Promise<RecordingMeta[]> {
 }
 
 export async function fetchRecordingMeta(id: string): Promise<RecordingMeta> {
-  const r = await fetch(`./api/recording/${encodeURIComponent(id)}/meta`);
+  const r = await fetch(`${recordingUrl(id)}/meta`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return (await r.json()) as RecordingMeta;
 }
@@ -50,7 +69,7 @@ export async function fetchReplayTiming(
   const empty: ReplayTiming = { startMs: 0, durationMs: 0, ticks: 0 };
   const path = encodeURIComponent(id);
   try {
-    const r = await fetch(`./api/recording/${path}/meta`, { signal });
+    const r = await fetch(`${recordingUrl(id)}/meta`, { signal });
     if (r.ok) {
       const m = (await r.json()) as RecordingMeta & { startedAtUtc?: string };
       const start = Date.parse(m.startedAtUtc ?? "");
@@ -123,7 +142,7 @@ export async function fetchRecordingFrames(
   // parameter and sends the original, so this is safe to request always.
   const seek = fromMs > 0 ? `&from=${Math.floor(fromMs)}` : "";
   const r = await fetch(
-    `./api/recording/${encodeURIComponent(id)}?v=${REPLAY_FORMAT_VERSION}${seek}`,
+    `${recordingUrl(id)}?v=${REPLAY_FORMAT_VERSION}${seek}`,
     signal ? { signal } : undefined);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const out: Snapshot[] = [];

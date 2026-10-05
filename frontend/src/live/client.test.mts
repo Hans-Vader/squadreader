@@ -1,6 +1,7 @@
 // Standalone unit test for the live stream decoder. Bundled with esbuild and
 // run under node, no framework (matches replayReconstruct.test.mts).
-import { createLiveFeed, retryAfterMinutes } from "./client.ts";
+import { createLiveFeed, edgeStep, isAtLive, retryAfterMinutes, shouldAdvanceRound } from "./client.ts";
+import { isLiveId, LIVE_DELAY_MS, recordingUrl } from "../api/recordings.ts";
 
 let passed = 0, failed = 0;
 function ok(cond: any, msg: string) {
@@ -62,6 +63,42 @@ eq(retryAfterMinutes("61"), 2, "61 s rounds up");
 eq(retryAfterMinutes("1"), 1, "at least one minute");
 eq(retryAfterMinutes(null), 1, "missing header means 1 min");
 eq(retryAfterMinutes("soon"), 1, "garbage means 1 min");
+
+// 6. Live ids reach the live round, every other id the archive. Both encoded.
+eq(recordingUrl("2026-05-25_002432_Gorodok_RAAS_v1_40323435"),
+   "./api/recording/2026-05-25_002432_Gorodok_RAAS_v1_40323435", "plain id");
+eq(recordingUrl("@live:2026-10-05_120000_X"), "./api/live/round/2026-10-05_120000_X", "live id");
+eq(recordingUrl("@live:a b/c"), "./api/live/round/a%20b%2Fc", "live id is encoded");
+eq(recordingUrl("a b"), "./api/recording/a%20b", "plain id is encoded");
+ok(isLiveId("@live:x") && !isLiveId("x") && !isLiveId(null) && !isLiveId(""), "isLiveId");
+
+// 7. The live edge.
+{
+  const base = { playing: true, stalled: false, speed: 1, lagMs: LIVE_DELAY_MS,
+                 pausedForBuffer: false };
+  eq(edgeStep(base), null, "steady at the edge: nothing to do");
+  eq(edgeStep({ ...base, speed: 4 }), "slow", "caught up at 4x: back to 1x");
+  eq(edgeStep({ ...base, speed: 4, lagMs: 60_000 }), null, "far behind at 4x: keep going");
+  eq(edgeStep({ ...base, speed: 4, playing: false }), null, "paused at 4x: leave the speed");
+  eq(edgeStep({ ...base, stalled: true, lagMs: 0 }), "buffer", "hit the edge: rebuffer");
+  eq(edgeStep({ ...base, playing: false, stalled: true, pausedForBuffer: true, lagMs: 2000 }),
+     null, "still rebuffering");
+  eq(edgeStep({ ...base, playing: false, stalled: true, pausedForBuffer: true }),
+     "resume", "8 s ahead again: play on");
+  eq(edgeStep({ ...base, playing: false, stalled: true, lagMs: 60_000 }),
+     "unstall", "a pause the user pressed stays; only the banner goes");
+  eq(edgeStep({ ...base, stalled: true, lagMs: 60_000 }),
+     "resume", "playing from far back: clear the stale stall");
+  ok(isAtLive(true, LIVE_DELAY_MS + 3000), "within 3 s of the edge is live");
+  ok(!isAtLive(true, LIVE_DELAY_MS + 3001), "further back is not");
+  ok(!isAtLive(false, 0), "paused is not live");
+}
+
+// 8. When the round is over: at its end, or at once if nothing of it ever came.
+ok(shouldAdvanceRound(0, 0, true), "no frames (the stream was 404): go now");
+ok(shouldAdvanceRound(10, 9, false), "stopped at the last frame: go");
+ok(!shouldAdvanceRound(10, 9, true), "still playing out: wait");
+ok(!shouldAdvanceRound(10, 3, false), "paused further back: leave the moderator be");
 
 console.log(`\nlive client tests: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

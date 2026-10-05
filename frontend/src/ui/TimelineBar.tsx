@@ -351,7 +351,9 @@ export function TimelineBar() {
   const seekToMs = (target: number, prefer: "after" | "before" = "after") => {
     // Live: nothing exists past the live edge yet, and asking the server for it
     // would throw away everything held. Past the edge means "live".
-    if (isLiveId(replayId)) target = Math.min(target, bufferedMs - LIVE_DELAY_MS);
+    // Once the live round stopped loading (ended or dropped) clamp into the held window instead.
+    if (isLiveId(replayId)) target = loading ? Math.min(target, bufferedMs - LIVE_DELAY_MS)
+                                             : Math.min(Math.max(target, windowStart), bufferedMs);
     const held = target >= windowStart - 1000 && target <= bufferedMs;
     if (!held) { restartReplayAt(Math.max(startMs, target)); return; }
     let lo = 0, hi = lastIdx;

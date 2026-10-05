@@ -1,6 +1,7 @@
 // Standalone unit test for the live map's client side. Bundled with esbuild and
 // run under node, no framework (matches replayReconstruct.test.mts).
 import { edgeStep, isAtLive, retryAfterMinutes, shouldAdvanceRound } from "./client.ts";
+import { useViewerStore } from "../state/viewerStore.ts";
 import { isLiveId, LIVE_DELAY_MS, recordingUrl } from "../api/recordings.ts";
 
 let passed = 0, failed = 0;
@@ -53,6 +54,31 @@ ok(shouldAdvanceRound(0, 0, true), "no frames (the stream was 404): go now");
 ok(shouldAdvanceRound(10, 9, false), "stopped at the last frame: go");
 ok(!shouldAdvanceRound(10, 9, true), "still playing out: wait");
 ok(!shouldAdvanceRound(10, 3, false), "paused further back: leave the moderator be");
+
+// 9. The live axis is "match start to newest frame", never the loaded window.
+{
+  const t0 = Date.parse("2026-10-05T12:00:00Z");
+  const fr = (ms: number[]) => ms.map((m) => ({ timestamp: new Date(m).toISOString() })) as any[];
+  const st = () => useViewerStore.getState();
+  st().openReplay("@live:r");
+  st().restartReplayAt(t0 + 60_000);
+  st().setReplayTiming({ startMs: t0, durationMs: 0 });
+  st().appendReplayFrames(fr([t0 + 61_000, t0 + 70_000]));
+  st().finishReplayLoad({ truncated: true });
+  eq(st().replay.totalMs, 0, "live: no inferred total after a drop");
+  eq(st().replay.matchStartMs, t0, "live: match start kept");
+  const before = st().replay.bufferedMs - st().replay.matchStartMs;
+  st().restartReplayAt(t0 + 80_000);
+  st().appendReplayFrames(fr([t0 + 81_000, t0 + 90_000]));
+  ok(st().replay.bufferedMs - st().replay.matchStartMs > before, "live: axis keeps growing after reconnect");
+
+  st().openReplay("2026-01-01_000000_X");
+  st().setReplayTiming({ startMs: t0, durationMs: 0 });
+  st().restartReplayAt(t0 + 60_000);
+  st().appendReplayFrames(fr([t0 + 61_000, t0 + 90_000]));
+  st().finishReplayLoad();
+  eq(st().replay.totalMs, 90_000, "recording: inferred total is measured from match start");
+}
 
 console.log(`\nlive client tests: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

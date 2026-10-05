@@ -367,8 +367,6 @@ def _read_body(h: Any) -> Optional[bytes]:
     return body
 
 
-
-
 def round_meta(state: Any) -> dict:
     """What the viewer needs to draw the timeline of the round being recorded."""
     started = state.first_snap_ts or state.started_at.isoformat()

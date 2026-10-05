@@ -58,6 +58,7 @@ function stillWaiting(): boolean {
 export function exitLive(): void {
   window.clearTimeout(retryTimer);
   useLive.setState({ waiting: false });
+  useViewerStore.getState().openReplay(null);
   useViewerStore.getState().setMode("home");
   setUrlMode(null);
 }
@@ -103,9 +104,11 @@ export async function goLive(): Promise<void> {
     while (i > 0 && Date.parse(r.frames[i]!.timestamp ?? "") > target) i--;
     v.setReplay((x) => ({ ...x, currentIdx: i, speed: 1, playing: true,
                           baseWallMs: 0, baseSnapMs: 0 }));
+    if (v.mode !== "replay") v.setMode("replay");
   } else {
     v.setReplay((x) => ({ ...x, speed: 1, playing: true }));
     v.restartReplayAt(from);
+    if (v.mode !== "replay") v.setMode("replay");
   }
 }
 

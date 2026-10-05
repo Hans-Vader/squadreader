@@ -5,6 +5,35 @@ snapshots — players, vehicles, capture zones, deployables, projectiles — the
 record whole matches for replay and compute per-player stats and ELO. It is
 **read-only**: it never writes to the game.
 
+## About this fork
+
+This is a fork of
+[cagrianilokumus/squadreader](https://github.com/cagrianilokumus/squadreader).
+It follows upstream and adds:
+
+- **Minimaps for modded and Steam Workshop maps.** Upstream's map table only
+  knows the stock layers, so a workshop map plays back over a bare grid. Here an
+  entry in `data/static/custom_maps.json` and an image in `sqmaps/` fill that
+  in; Hrodna Border ships configured. See
+  [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
+- **Capture-zone labels from the game's own flag text.** A mod built from a
+  copied map keeps the original's actor names, so a zone could be labelled
+  after a place on another map. The name the in-game HUD shows now wins.
+- **A hardened replay server.** The web UI is served with a
+  Content-Security-Policy without `unsafe-inline`, every response carries
+  `X-Content-Type-Options: nosniff`, and the `Server` header no longer names
+  the Python version. A failing stats query is logged for the operator instead
+  of being echoed to the client. An unreadable file or directory (a mount with
+  the wrong owner) answers 404 with a log line saying why, instead of a silent
+  404 or a dropped connection, and a viewer closing the tab mid-download no
+  longer leaves a traceback in the log.
+- **No Google Analytics.** The web UI contacts no third party.
+- **Notes for operators and contributors.**
+  [docs/docker-capabilities.md](docs/docker-capabilities.md) explains why the
+  container needs exactly `SYS_PTRACE` and `DAC_READ_SEARCH`, and
+  [CONTRIBUTING.md](CONTRIBUTING.md) rebuilds the web UI in a throwaway
+  container on a box without Node.
+
 ## Example output
 
 `sqreader snapshot --pretty` prints one JSON snapshot of the live match:

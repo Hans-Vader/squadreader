@@ -38,3 +38,12 @@
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); border: 0;
 }
+
+/* The LIVE button: red while the playhead is at the live edge. */
+#controls .live-edge.on {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 50%, transparent);
+}
+#controls .live-edge:disabled { cursor: default; opacity: 1; }
+/* The wait between rounds; LiveAccess sits outside #stage, hence fixed. */
+#live-waiting { position: fixed; }

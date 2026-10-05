@@ -1,13 +1,17 @@
+
 """Serve the viewer with a fake live round; no Squad server needed.
 
-    .venv/bin/python scripts/live_dev_server.py            # synthetic players
-    .venv/bin/python scripts/live_dev_server.py --sqrx R   # replay a recording as live
-    .venv/bin/python scripts/live_dev_server.py --no-live  # the public build, to compare
+    .venv/bin/python scripts/live_dev_server.py                  # synthetic players
+    .venv/bin/python scripts/live_dev_server.py --sqrx R         # replay a recording as live
+    .venv/bin/python scripts/live_dev_server.py --round-sec 120  # a new round every 2 min
+    .venv/bin/python scripts/live_dev_server.py --no-live        # the public build, to compare
 
-Then open http://localhost:8090/?mode=live and log in with the printed
-password. It serves frontend/dist, icons and sqmaps the way `sqreader serve`
-does and feeds the live map a full frame every 2 s plus 4 Hz position frames.
-SIGHUP exercises the revoke path: the password is re-read from
+Then open http://localhost:8090/, click Moderator-Login and log in with the
+printed password. It serves frontend/dist, icons and sqmaps the way
+`sqreader serve` does, and writes the round into a temporary .sqrx the way the
+recorder does: a full frame every 2 s plus 4 Hz position frames. With
+--round-sec the round ends after that many seconds and the next one starts
+10 s later. SIGHUP exercises the revoke path: the password is re-read from
 $SQREADER_CONFIG, which this script points at a temporary file holding
 --password unless it is set already.
 """
@@ -22,19 +26,24 @@ import signal
 import sys
 import tempfile
 import threading
+import time
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from sqreader.httpsrv import _TickBeat, serve_in_background   # noqa: E402
 from sqreader.live import LiveMap                             # noqa: E402
-from sqreader.sqrx import SqrxReader                          # noqa: E402
+from sqreader.recorder import RecordingState                  # noqa: E402
+from sqreader.sqrx import SqrxReader, SqrxWriter              # noqa: E402
 
 DEV_PASSWORD = "dev-password-for-the-live-map"
 PLAYERS = 20
 RADIUS = 150_000.0      # UE units; Gorodok spans about +-203 000
+BETWEEN_ROUNDS_SEC = 10.0
 
 
 def _now() -> str:
@@ -79,31 +88,57 @@ def pos_frame(tick: int, t: float) -> dict:
             "players": [{"id": eos, "x": x, "y": y} for eos, x, y in _positions(t)]}
 
 
-def feed_synthetic(live: LiveMap, stop: threading.Event) -> None:
+def synthetic_lines(stop: threading.Event) -> Iterator[tuple[str, bool]]:
     tick = 0
     while not stop.wait(0.25):
         tick += 1
         t = tick * 0.25
         if tick % 8 == 1:
-            live.publish(json.dumps(full_frame(tick, t)) + "\n", full=True)
+            yield json.dumps(full_frame(tick, t)), True
         else:
-            live.publish(json.dumps(pos_frame(tick, t)) + "\n", full=False)
+            yield json.dumps(pos_frame(tick, t)), False
 
 
-def feed_recording(live: LiveMap, stop: threading.Event, path: Path) -> None:
-    """Replay a .sqrx at its own pace (gaps capped at 2 s), looping."""
+def recording_lines(stop: threading.Event, path: Path) -> Iterator[tuple[str, bool]]:
+    """A .sqrx at its own pace (gaps capped at 2 s), once through."""
+    last = None
+    with SqrxReader(path) as reader:
+        for line in reader:
+            if stop.is_set():
+                return
+            frame = json.loads(line)
+            ts = datetime.fromisoformat(frame["timestamp"]).timestamp()
+            if last is not None:
+                stop.wait(min(2.0, max(0.0, ts - last)))
+            last = ts
+            yield line, frame.get("t") != "pos"
+
+
+def feed(live: LiveMap, stop: threading.Event, out_dir: Path, sqrx: Optional[Path],
+         round_sec: float) -> None:
+    """One .sqrx per round, written and announced the way recorder.py and
+    cli.py do it."""
+    box: dict = {"current": None}
+    live.recording = lambda: box["current"]
+    n = 0
     while not stop.is_set():
-        last = None
-        with SqrxReader(path) as reader:
-            for line in reader:
-                if stop.is_set():
-                    return
-                frame = json.loads(line)
-                ts = datetime.fromisoformat(frame["timestamp"]).timestamp()
-                if last is not None:
-                    stop.wait(min(2.0, max(0.0, ts - last)))
-                last = ts
-                live.publish(line + "\n", full=frame.get("t") != "pos")
+        n += 1
+        path = out_dir / f"dev-round-{n}.sqrx"
+        state = RecordingState(match_id=f"dev-{n}", writer=SqrxWriter(path, "live-dev"),
+                               path=path, started_at=datetime.now(timezone.utc))
+        box["current"] = state
+        began = time.monotonic()
+        for line, full in recording_lines(stop, sqrx) if sqrx else synthetic_lines(stop):
+            state.writer.write_line(line)
+            if full:
+                state.last_snap_ts = json.loads(line)["timestamp"]
+                state.first_snap_ts = state.first_snap_ts or state.last_snap_ts
+            if round_sec and time.monotonic() - began >= round_sec:
+                break
+        box["current"] = None
+        state.writer.close()
+        print(f"round {n} over: {path}", file=sys.stderr)
+        stop.wait(BETWEEN_ROUNDS_SEC)
 
 
 def main() -> int:
@@ -111,7 +146,9 @@ def main() -> int:
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8090)
     ap.add_argument("--password", default=DEV_PASSWORD)
-    ap.add_argument("--sqrx", type=Path, help="replay this recording as the live feed")
+    ap.add_argument("--sqrx", type=Path, help="replay this recording as the live round")
+    ap.add_argument("--round-sec", type=float, default=0.0,
+                    help="end each round after this many seconds and start the next")
     ap.add_argument("--no-live", action="store_true", help="serve without the live map")
     args = ap.parse_args()
     logging.basicConfig(level="INFO", format="%(levelname)s %(name)s: %(message)s")
@@ -129,19 +166,14 @@ def main() -> int:
             cfg.write_text(json.dumps({"live_password": args.password}), encoding="utf-8")
             os.environ["SQREADER_CONFIG"] = str(cfg)
         signal.signal(signal.SIGHUP, live.on_sighup)
-        if args.sqrx:
-            feed = threading.Thread(target=feed_recording, args=(live, stop, args.sqrx),
-                                    daemon=True)
-        else:
-            feed = threading.Thread(target=feed_synthetic, args=(live, stop), daemon=True)
-        feed.start()
-        print(f"http://localhost:{args.port}/?mode=live  password: {args.password}  "
+        threading.Thread(target=feed, daemon=True,
+                         args=(live, stop, Path(tempfile.mkdtemp()), args.sqrx,
+                               args.round_sec)).start()
+        print(f"http://localhost:{args.port}/  password: {args.password}  "
               f"(pid {os.getpid()})", file=sys.stderr)
     else:
         print(f"http://localhost:{args.port}/  (no live map)", file=sys.stderr)
     stop.wait()
-    if live is not None:
-        live.hub.close()
     srv.shutdown()
     return 0
 

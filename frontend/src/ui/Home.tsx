@@ -53,7 +53,7 @@ const showModal = (id: string) =>
 export function Home() {
   const canLive = useViewerStore((s) => s.canLive);
   const setMode = useViewerStore((s) => s.setMode);
-  const setReplay = useViewerStore((s) => s.setReplay);
+  const openReplay = useViewerStore((s) => s.openReplay);
 
   const [recs, setRecs] = useState<RecordingMeta[] | null>(null);
   const [top, setTop] = useState<LeaderRow[] | null>(null);
@@ -69,8 +69,7 @@ export function Home() {
   const tiles = (recs ?? []).slice(0, 6);
 
   const playRecording = (id: string) => {
-    setReplay((r) => ({ ...r, id, frames: [], currentIdx: 0, playing: false,
-                        speed: 1, baseWallMs: 0, baseSnapMs: 0 }));
+    openReplay(id);
     setMode("replay");
     const url = new URL(window.location.href);
     url.searchParams.set("mode", "replay");

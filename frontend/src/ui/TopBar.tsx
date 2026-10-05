@@ -7,6 +7,8 @@ import { useViewerStore } from "../state/viewerStore";
 import { ClipRecorder } from "./ClipRecorder";
 import { SettingsMenu } from "./SettingsMenu";
 import { LiveControls } from "../live/LiveAccess";
+import { fmtDayMonth } from "../format";
+import { isLiveId } from "../api/recordings";
 
 export function TopBar() {
   const status = useViewerStore((s) => s.status);
@@ -18,6 +20,7 @@ export function TopBar() {
   const mode = useViewerStore((s) => s.mode);
   const replayId = useViewerStore((s) => s.replay.id);
   const setMode = useViewerStore((s) => s.setMode);
+  const live = isLiveId(replayId);
   const timelineVisible = useViewerStore((s) => s.timelineVisible);
   const toggleTimeline = useViewerStore((s) => s.toggleTimeline);
 
@@ -30,10 +33,7 @@ export function TopBar() {
   const matchDate = (() => {
     const ts = curSnap?.timestamp;
     if (!ts) return null;
-    const d = new Date(ts);
-    return isNaN(d.getTime())
-      ? null
-      : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return fmtDayMonth(ts);
   })();
 
   // How long since data last ARRIVED. Measured on our own clock (arrival time,
@@ -60,7 +60,7 @@ export function TopBar() {
                  : ageSec > 30 ? "bad"
                  : ageSec > 8  ? "warn" : "";
 
-  const statusClass = status === "live" ? "live"
+  const statusClass = live || status === "live" ? "live"
                     : status === "reconnecting" ? "bad"
                     : status === "replay" ? "warn"
                     : "warn";
@@ -97,7 +97,7 @@ export function TopBar() {
             BETA
           </span>
           <span className={"pill " + statusClass}>
-            {mode === "replay" ? "recording" : (STATUS_TR[status] ?? status)}
+            {mode === "replay" ? (live ? "live" : "recording") : (STATUS_TR[status] ?? status)}
           </span></div>
         <div>tick <b>{curSnap?.tick ?? "—"}</b>
           {" · "}<span>{rate}</span>
@@ -119,7 +119,7 @@ export function TopBar() {
       </div>
       <div id="controls">
         {/* Exit-replay: back to the landing page. Only while watching. */}
-        {mode === "replay" && (
+        {mode === "replay" && !live && (
           <button className="tb-back" onClick={goBack}
                   title="back to the landing page">← Back</button>
         )}

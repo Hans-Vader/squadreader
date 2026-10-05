@@ -3,6 +3,7 @@
 - **Datum:** 2026-09-29
 - **Branch:** `live-moderation` (von `main` = Upstream v1.4.8). Die Änderung gibt es nur im Fork: Sie wird in `dcn-branding` gemergt und nie Upstream vorgeschlagen.
 - **Status:** zur Durchsicht
+- **Abgelöst in Teilen:** Abschnitt 8 (Live-Stream per SSE) und die SSE-Teile von 3, 9, 10, 13 und 14 ersetzt `2026-10-05-live-replay-design.md`: Die Live-Karte ist seitdem ein Replay der laufenden Runde.
 
 ## 1. Ziel
 

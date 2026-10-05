@@ -1,7 +1,6 @@
-// Moderator live map: the few server calls and the per-connection frame
-// decoder. Fork-only; see docs/superpowers/specs/2026-09-29-live-moderation-design.md.
-import type { Snapshot } from "../state/types";
-import { ReplayReconstructor, type RecordingLine } from "../state/replayReconstruct";
+// Moderator live map: the few server calls and the rules of the live edge.
+// Fork-only; see docs/superpowers/specs/2026-10-05-live-replay-design.md.
+import { LIVE_DELAY_MS } from "../api/recordings";
 
 // off = the server has no live map (404), anon = logged out, ok = logged in,
 // unknown = could not tell (network or server error).
@@ -58,20 +57,67 @@ export async function logout(): Promise<void> {
   }
 }
 
-export interface LiveFeed {
-  push(data: string): Snapshot | null;
+export interface LiveRound {
+  /** The recording's file name without .sqrx. */
+  id: string;
+  /** Timestamp of its newest full frame, on the SERVER's clock. */
+  latestMs: number;
 }
 
-// One per connection: the stream always starts with a full frame, and the
-// reconstructor folds the 4 Hz position frames onto the last one.
-export function createLiveFeed(): LiveFeed {
-  const recon = new ReplayReconstructor();
-  return {
-    push(data: string): Snapshot | null {
-      let v: unknown;
-      try { v = JSON.parse(data); } catch { return null; }
-      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-      return recon.push(v as RecordingLine);
-    },
-  };
+/** The round being recorded right now; "anon" if logged out, null if none. */
+export async function fetchLiveRound(): Promise<LiveRound | "anon" | null> {
+  try {
+    const r = await fetch("./api/live/round", { cache: "no-store" });
+    if (r.status === 401) return "anon";
+    if (!r.ok) return null;
+    const m = (await r.json()) as { id?: unknown; latestUtc?: unknown };
+    const latestMs = Date.parse(String(m.latestUtc));
+    if (typeof m.id !== "string" || !Number.isFinite(latestMs)) return null;
+    return { id: m.id, latestMs };
+  } catch {
+    return null;
+  }
+}
+
+export interface EdgeInput {
+  playing: boolean;
+  stalled: boolean;
+  speed: number;
+  /** Newest held frame minus the playhead, in ms. */
+  lagMs: number;
+  /** The live edge itself paused playback to rebuffer. */
+  pausedForBuffer: boolean;
+}
+
+export type EdgeAction = "slow" | "buffer" | "resume" | "unstall" | null;
+
+/**
+ * What the live edge does next, looked at four times a second.
+ *
+ * slow:    caught up faster than 1x: play on at 1x, which is live.
+ * buffer:  the playhead hit the newest frame: pause until LIVE_DELAY_MS is
+ *          held again, instead of stuttering frame by frame at the edge.
+ * resume:  enough is held again (or the user went back): play on.
+ * unstall: the user paused far back during a stall: their pause stays, the
+ *          "buffering" banner goes.
+ */
+export function edgeStep(s: EdgeInput): EdgeAction {
+  if (s.stalled && s.lagMs < LIVE_DELAY_MS) return s.playing ? "buffer" : null;
+  if (s.stalled) return s.playing || s.pausedForBuffer ? "resume" : "unstall";
+  if (s.playing && s.speed > 1 && s.lagMs <= LIVE_DELAY_MS) return "slow";
+  return null;
+}
+
+/** At the live edge: playing, and no more than 3 s further back than it. */
+export function isAtLive(playing: boolean, lagMs: number): boolean {
+  return playing && lagMs <= LIVE_DELAY_MS + 3000;
+}
+
+/**
+ * The round is over: move on once it has played out, or at once if none of it
+ * ever arrived (the stream answered 404 because the round had just changed).
+ */
+export function shouldAdvanceRound(frameCount: number, currentIdx: number,
+                                   playing: boolean): boolean {
+  return frameCount === 0 || (!playing && currentIdx >= frameCount - 1);
 }

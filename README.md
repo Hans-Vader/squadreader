@@ -5,6 +5,35 @@ snapshots — players, vehicles, capture zones, deployables, projectiles — the
 record whole matches for replay and compute per-player stats and ELO. It is
 **read-only**: it never writes to the game.
 
+## About this fork
+
+This is a fork of
+[cagrianilokumus/squadreader](https://github.com/cagrianilokumus/squadreader).
+It follows upstream and adds:
+
+- **Minimaps for modded and Steam Workshop maps.** Upstream's map table only
+  knows the stock layers, so a workshop map plays back over a bare grid. Here an
+  entry in `data/static/custom_maps.json` and an image in `sqmaps/` fill that
+  in; Hrodna Border ships configured. See
+  [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
+- **Capture-zone labels from the game's own flag text.** A mod built from a
+  copied map keeps the original's actor names, so a zone could be labelled
+  after a place on another map. The name the in-game HUD shows now wins.
+- **A hardened replay server.** The web UI is served with a
+  Content-Security-Policy without `unsafe-inline`, every response carries
+  `X-Content-Type-Options: nosniff`, and the `Server` header no longer names
+  the Python version. A failing stats query is logged for the operator instead
+  of being echoed to the client. An unreadable file or directory (a mount with
+  the wrong owner) answers 404 with a log line saying why, instead of a silent
+  404 or a dropped connection, and a viewer closing the tab mid-download no
+  longer leaves a traceback in the log.
+- **No Google Analytics.** The web UI contacts no third party.
+- **Notes for operators and contributors.**
+  [docs/docker-capabilities.md](docs/docker-capabilities.md) explains why the
+  container needs exactly `SYS_PTRACE` and `DAC_READ_SEARCH`, and
+  [CONTRIBUTING.md](CONTRIBUTING.md) rebuilds the web UI in a throwaway
+  container on a box without Node.
+
 ## Example output
 
 `sqreader snapshot --pretty` prints one JSON snapshot of the live match:
@@ -243,6 +272,14 @@ wrong directory and cost you the kill feed silently.
 before `/proc/<pid>/mem` is ever opened. Otherwise check that `cap_add` still
 lists both `SYS_PTRACE` and `DAC_READ_SEARCH`.
 
+**`PermissionError` on a host that runs SELinux rather than AppArmor** (RHEL,
+Rocky, Fedora) — `SQUAD_APPARMOR` has nothing to act on there, so neither of
+its values changes anything. The confinement that can still refuse the ptrace
+is SELinux, and its denial is written to the HOST's `/var/log/audit/audit.log`
+rather than anywhere the container can see it: `ausearch -m avc -ts recent`
+while the reader retries is what separates a policy denial from a capability
+mistake.
+
 **`entrypoint: WARNING: /squad/SquadGame/Saved/Logs/SquadGame.log is not
 readable`** — the `/squad` mount is wrong. `SQUAD_DATA` must be the install
 root, the directory that *contains* `SquadGame/`. Expected while your server is
@@ -299,6 +336,56 @@ Output directories are `serve`/`record` flags (`--recordings-dir`, `--stats-db`,
 `--icons-dir`, `--sqmaps-dir`, `--frontend-dir`) and default next to the repo.
 Example systemd units and an nginx/Caddy reverse-proxy are in [`deploy/`](deploy/).
 
+### Modded / Steam Workshop maps
+
+The bundled map table covers the stock layers. A workshop map is not in it, so
+the recorder attaches no layer to its frames and the viewer draws a bare grid —
+everything else (players, vehicles, markers, kill feed, stats) works as normal.
+
+To give a modded map its minimap, add it to `data/static/custom_maps.json`
+(create it; it is optional and loaded only if present):
+
+```json
+{
+  "Hrodna Border": {
+    "texture":     "HrodnaBorder",
+    "topLeft":     { "x": -200000, "y": -200000 },
+    "bottomRight": { "x":  200000, "y":  200000 }
+  }
+}
+```
+
+Then drop the minimap image next to the stock ones as
+`sqmaps/HrodnaBorder.webp` (`.png`, `.jpg` also work).
+
+- **The key is the MAP name, not the layer name** — one entry covers every
+  RAAS/AAS/Invasion/Seed layer of that mod. Matching ignores case, spaces and
+  underscores and tolerates a community tag in front, so `Hrodna Border` finds
+  both `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more
+  specific key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys
+  under three characters are ignored so a typo cannot swallow unrelated maps.
+- **`texture` is the filename without extension** and must match
+  `[A-Za-z0-9_-]+` — no spaces.
+- **`topLeft`/`bottomRight` are the minimap's world corners in centimetres.**
+  The SDK requires them to form a square. Ask the mod author for the exact
+  values; failing that, a centred square of the advertised map size is a good
+  first guess (4 km → `±200000`), then check a replay and adjust.
+
+An entry that is missing its corners, or whose `texture` the server would
+refuse, is dropped with a warning at startup rather than used — a half-written
+entry hides the map the viewer would otherwise have guessed. Changes are read at
+startup, so restart the reader. In Docker both files are baked into the image
+(`COPY . /app`) — rebuild after adding a map.
+
+Known gaps:
+
+- **RAAS capture zones stay unrendered on modded maps.** Their static geometry
+  comes from SquadCalc, which does not carry workshop layers. AAS layers are
+  unaffected — there the live capture zones carry their own positions.
+- **Overriding a stock layer** (by naming it exactly) replaces its extent but
+  not its capture-zone geometry, which stays in the stock layer's coordinates.
+  Expect the flags to sit wrong unless the new bounds match the old ones.
+
 ## What data it collects and where it writes
 
 The reader only observes what the game already holds in memory, and **by
@@ -323,6 +410,7 @@ See [PRIVACY.md](PRIVACY.md) for what is stored, how long, and how to delete it.
 - **Squad-version-specific.** Memory offsets are reverse-engineered for Squad v10.4 / SDK v10.4.1. A Squad update can move them — `sqreader doctor` re-verifies every offset against the live binary and reports drift, and startup discovery self-heals the two anchor addresses; a larger layout change needs new offsets.
 - **Anti-cheat detectors have blind spots.** They flag only memory-verified signals (no guessing), so many cheat classes are simply not detectable this way.
 - **One game server per reader instance.**
+- **Modded maps need a hand-written entry.** Bounds and minimap for a workshop map cannot be derived from the game; see [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
 
 ## Legal
 

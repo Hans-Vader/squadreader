@@ -15,11 +15,11 @@ WRONG = "wrong-password-but-long"
 @pytest.mark.parametrize("value, reason", [
     (None, None),
     ("", None),
-    (12345678901234567890123, live._TOO_SHORT),
-    ("short-password", live._TOO_SHORT),
+    (12345, live._NOT_STR),
     (" " + PW, live._PADDED),
     (PW + "\n", live._PADDED),
     ("   ", live._PADDED),
+    ("scrypt:16384:8:1:short:key", live._BAD_HASH),
 ])
 def test_unusable_passwords_are_rejected_without_echoing_them(value, reason):
     password, why = live.validate_password(value)
@@ -29,10 +29,101 @@ def test_unusable_passwords_are_rejected_without_echoing_them(value, reason):
         assert value.strip() not in why
 
 
-def test_a_long_enough_password_is_accepted():
+def test_a_password_of_any_length_is_accepted():
+    assert live.validate_password("x") == ("x", None)
     assert live.validate_password(PW) == (PW, None)
-    exact = "x" * live.MIN_PASSWORD_LEN
-    assert live.validate_password(exact) == (exact, None)
+    assert live.Access("x").login("x", "c", [])[0] == "ok"
+
+
+def test_plain_text_is_refused_where_only_a_hash_may_stand():
+    assert live.validate_password(PW, hash_only=True) == (None, live._NOT_HASH)
+    h = live.hash_password(PW)
+    assert live.validate_password(h, hash_only=True) == (h, None)
+
+
+def test_a_hash_logs_in_with_its_password_only():
+    h = live.hash_password(PW)
+    assert h.startswith("scrypt:16384:8:1:")
+    assert "$" not in h and "=" not in h          # Compose expands `$` in an .env
+    assert live.validate_password(h) == (h, None)
+    a = live.Access(h)
+    assert a.login(WRONG, "c", []) == ("wrong", None)
+    assert a.login(PW, "c", [])[0] == "ok"
+    assert a.login(h, "c", []) == ("wrong", None)  # the hash string is not the password
+
+
+def test_an_unparsable_stored_hash_lets_nobody_in():
+    assert live.Access("scrypt:broken").login("scrypt:broken", "c", []) == ("wrong", None)
+
+
+def test_hashes_are_salted():
+    one, two = live.hash_password(PW), live.hash_password(PW)
+    assert one != two
+    assert live.Access(two).login(PW, "c", [])[0] == "ok"
+
+
+GOOD = live.hash_password(PW, salt=b"s" * 16)
+
+
+@pytest.mark.parametrize("value", [
+    "scrypt:",
+    GOOD.rsplit(":", 1)[0],                            # no key
+    GOOD.replace(":16384:", ":16383:"),                # n not a power of two
+    GOOD.replace(":16384:", f":{2**21}:"),             # n too large
+    GOOD.replace(":16384:8:", f":{2**20}:8:"),         # 128*n*r beyond 256 MiB
+    GOOD.replace(":8:1:", ":8:5:"),                    # p too large
+    GOOD.replace(":8:1:", ":x:1:"),                    # not a number
+    GOOD[:-4],                                         # key too short
+    GOOD.replace(":16384:8:", f":{2**16}:1:"),         # OpenSSL wants n < 2**(16*r)
+])
+def test_broken_or_costly_hashes_are_rejected(value):
+    assert live.validate_password(value) == (None, live._BAD_HASH)
+
+
+def test_reset_with_the_same_hash_says_unchanged():
+    h = live.hash_password(PW)
+    a = live.Access(h)
+    assert a.reset(h) is False
+    assert a.reset(live.hash_password(PW)) is True     # same password, new salt: new value
+
+
+def test_the_environment_hash_wins_over_live_password(monkeypatch):
+    h = live.hash_password(PW)
+    monkeypatch.setenv(live.ENV_HASH, h)
+    assert live.password_from("some-other-password") == (h, None, live.ENV_HASH)
+    monkeypatch.setenv(live.ENV_HASH, PW)               # plain text there is refused
+    assert live.password_from(PW) == (None, live._NOT_HASH, live.ENV_HASH)
+    monkeypatch.setenv(live.ENV_HASH, h + "\n")         # pasted with its newline
+    assert live.password_from(PW) == (None, live._PADDED, live.ENV_HASH)
+    monkeypatch.setenv(live.ENV_HASH, "")               # Compose's ${…:-} when unset
+    assert live.password_from(PW) == (PW, None, "live_password")
+
+
+def test_the_hash_command_prints_a_working_hash(monkeypatch, capsys):
+    answers = iter([PW, PW])
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": next(answers))
+    assert live.main(["hash"]) == 0
+    printed = capsys.readouterr().out.strip()
+    assert PW not in printed
+    assert live.Access(printed).login(PW, "c", [])[0] == "ok"
+
+
+@pytest.mark.parametrize("first, second", [
+    (PW, PW + "x"), ("", ""), (" " + PW, " " + PW), (GOOD, GOOD),
+])
+def test_the_hash_command_refuses_mismatches_and_unusable_input(monkeypatch, capsys,
+                                                                 first, second):
+    answers = iter([first, second])
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": next(answers))
+    assert live.main(["hash"]) == 1
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert PW not in out.err
+
+
+def test_the_hash_command_wants_its_word(capsys):
+    assert live.main([]) == 2
+    assert "usage: python3 -m sqreader.live hash" in capsys.readouterr().err
 
 
 def test_right_password_opens_a_session_and_wrong_one_does_not():

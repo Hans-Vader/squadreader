@@ -1,19 +1,24 @@
-"""Moderator-only live map. Fork-only, and OFF unless live_password is set.
+"""Moderator-only live map. Fork-only, and OFF unless a live password is set.
 
 Upstream removed the live view from the public build (tests/test_public_no_live.py)
 because a live map shows every player of both teams in real time. This module
-brings it back behind a login: one shared password from sqreader.config.json,
-an in-memory session cookie, and a Server-Sent-Events stream of the reader's
-own frame lines.
+brings it back behind a login: one shared password (a scrypt hash in
+SQREADER_LIVE_PASSWORD_HASH, or live_password in sqreader.config.json), an
+in-memory session cookie, and the running round's growing .sqrx, streamed from
+any point and then followed as the recorder appends to it. The viewer plays it
+like any replay, with "live" a few seconds behind its newest frame.
 
-Without a valid live_password, live_from_config() returns None and the HTTP
-server stays exactly the public build: no /api/live/ route, no do_POST and no
-SIGHUP handler.
+Without a valid password, live_from_config() returns None and the HTTP server
+stays exactly the public build: no /api/live/ route, no do_POST and no SIGHUP
+handler.
 
-Design: docs/superpowers/specs/2026-09-29-live-moderation-design.md
+Design: docs/superpowers/specs/2026-09-29-live-moderation-design.md (login,
+sessions, SIGHUP) and docs/superpowers/specs/2026-10-05-live-replay-design.md
+(the round stream, the password hash).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import ipaddress
@@ -22,15 +27,23 @@ import logging
 import math
 import os
 import secrets
+import sys
 import threading
 import time
+import urllib.parse
+import zlib
 from collections import deque
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Optional
+
+import zstandard as zstd
+
+from .config import config_path
+from .httpsrv import _replay_from
+from .sqrx import SqrxReader
 
 log = logging.getLogger("sqreader.live")
 
-MIN_PASSWORD_LEN = 20
 SESSION_TTL_SEC = 43200           # 12 h, absolute; never extended
 MAX_SESSIONS = 32
 BODY_MAX = 1024                   # bytes of a login/logout body
@@ -39,34 +52,91 @@ FAIL_WINDOW_SEC = 600.0
 FAILS_PER_CLIENT = 5
 FAILS_GLOBAL = 50
 MAX_STREAMS = 10
-RING_SIZE = 128
-KEEPALIVE_SEC = 15.0
-RETRY_MS = 3000
 WRITE_TIMEOUT_SEC = 20.0
+POLL_SEC = 0.25                   # at the end of a round's file: look again after this
 REFUSED_LOG_INTERVAL_SEC = 60.0
 MAX_COOKIE_VALUES = 8             # sqr_live values read from one request
 
 COOKIE = "sqr_live"
 
-_TOO_SHORT = ("live map disabled: live_password must be a string of at least "
-              f"{MIN_PASSWORD_LEN} characters")
-_PADDED = "live map disabled: live_password has leading or trailing whitespace"
+ENV_HASH = "SQREADER_LIVE_PASSWORD_HASH"
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2**14, 8, 1
+
+# Reasons a value is unusable. They never contain the value, which is a
+# credential; the caller puts the name of where it came from in front.
+_NOT_STR = "must be a string"
+_PADDED = "has leading or trailing whitespace"
+_BAD_HASH = "is not a valid scrypt hash"
+_NOT_HASH = "must be a hash from `python3 -m sqreader.live hash`"
 
 
-def validate_password(value: Any) -> tuple[Optional[str], Optional[str]]:
-    """(password, None) if usable, (None, reason) if not, (None, None) if unset.
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
-    The reason never contains the value: it is a credential.
+
+def _unb64(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def hash_password(password: str, salt: Optional[bytes] = None) -> str:
+    """scrypt:<n>:<r>:<p>:<salt>:<key>, base64url without padding.
+
+    No `$` anywhere: Compose expands it in an .env file.
+    """
+    salt = secrets.token_bytes(16) if salt is None else salt
+    key = hashlib.scrypt(password.encode("utf-8", "surrogatepass"), salt=salt,
+                         n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
+    return f"scrypt:{SCRYPT_N}:{SCRYPT_R}:{SCRYPT_P}:{_b64(salt)}:{_b64(key)}"
+
+
+def parse_hash(value: str) -> Optional[tuple[int, int, int, bytes, bytes]]:
+    """(n, r, p, salt, key) of a well-formed hash at a sane cost, else None.
+
+    The cost caps keep a typo from asking scrypt for gigabytes at every login.
+    """
+    parts = value.split(":")
+    if len(parts) != 6 or parts[0] != "scrypt":
+        return None
+    try:
+        n, r, p = (int(x) for x in parts[1:4])
+        salt, key = _unb64(parts[4]), _unb64(parts[5])
+    except ValueError:                    # binascii.Error is a ValueError
+        return None
+    if not (2 <= n <= 2**20 and n & (n - 1) == 0 and 1 <= r <= 16 and 1 <= p <= 4
+            and 128 * n * r <= 2**28 and n < 2**(16 * r) and len(salt) >= 16 and len(key) == 32):
+        return None
+    return n, r, p, salt, key
+
+
+def validate_password(value: Any, *,
+                      hash_only: bool = False) -> tuple[Optional[str], Optional[str]]:
+    """(secret, None) if usable, (None, reason) if not, (None, None) if unset.
+
+    The secret is a scrypt hash, or a plain password of any length unless
+    `hash_only`. The reason never contains the value: it is a credential.
     """
     if value is None or value == "":
         return None, None
     if not isinstance(value, str):
-        return None, _TOO_SHORT
+        return None, _NOT_STR
     if value != value.strip():
         return None, _PADDED
-    if len(value) < MIN_PASSWORD_LEN:
-        return None, _TOO_SHORT
+    if value.startswith("scrypt:"):
+        return (value, None) if parse_hash(value) else (None, _BAD_HASH)
+    if hash_only:
+        return None, _NOT_HASH
     return value, None
+
+
+def password_from(config_value: Any) -> tuple[Optional[str], Optional[str], str]:
+    """(secret, reason, source): a non-empty SQREADER_LIVE_PASSWORD_HASH wins over
+    live_password, and only a hash may stand there."""
+    env = os.environ.get(ENV_HASH)
+    if env:
+        secret, reason = validate_password(env, hash_only=True)
+        return secret, reason, ENV_HASH
+    secret, reason = validate_password(config_value)
+    return secret, reason, "live_password"
 
 
 def _digest(text: str) -> bytes:
@@ -120,25 +190,24 @@ def cookie_values(headers: Any) -> list[str]:
 
 
 class Access:
-    """The shared password and the sessions it grants. One lock guards both."""
+    """The shared password (or its hash) and the sessions it grants. One lock guards both."""
 
-    def __init__(self, password: Optional[str]) -> None:
+    def __init__(self, secret: Optional[str]) -> None:
         self._lock = threading.Lock()
-        self._digest: Optional[bytes] = _digest(password) if password else None
-        # token -> (monotonic expiry, client key)
-        self._sessions: dict[str, tuple[float, str]] = {}
+        self._secret = secret
+        # token -> monotonic expiry
+        self._sessions: dict[str, float] = {}
         self._fails: deque[tuple[float, str]] = deque()      # (monotonic time, client)
 
-    def reset(self, password: Optional[str]) -> bool:
-        """A new password (None: nobody can log in) and no sessions at all.
+    def reset(self, secret: Optional[str]) -> bool:
+        """A new secret (None: nobody can log in) and no sessions at all.
 
-        True if that changed the stored password, "no password" counting as a
+        True if that changed the stored secret, "no password" counting as a
         value of its own. The sessions are gone either way.
         """
-        new = _digest(password) if password else None
         with self._lock:
-            changed = new != self._digest
-            self._digest = new
+            changed = secret != self._secret
+            self._secret = secret
             self._sessions.clear()
         return changed
 
@@ -168,7 +237,7 @@ class Access:
                 for token in presented:
                     self._sessions.pop(token, None)
                 self._fails = deque(f for f in self._fails if f[1] != client)
-                result = ("ok", self._new_session(client, now))
+                result = ("ok", self._new_session(now))
         if result[0] == "ok":
             log.info("live: login ok from %s (session %s)", client, session_id(result[1]))
         else:
@@ -198,10 +267,10 @@ class Access:
     def valid(self, token: str) -> bool:
         now = time.monotonic()
         with self._lock:
-            entry = self._sessions.get(token)
-            if entry is None:
+            expires = self._sessions.get(token)
+            if expires is None:
                 return False
-            if entry[0] <= now:
+            if expires <= now:
                 del self._sessions[token]
                 return False
             return True
@@ -227,116 +296,27 @@ class Access:
         return found
 
     def _check(self, given: str) -> bool:                     # caller holds the lock
-        if self._digest is None:
+        # scrypt under the lock (~50 ms) serialises logins, which together with
+        # the throttle also bounds what a flood of them costs.
+        if self._secret is None:
             return False
-        return hmac.compare_digest(_digest(given), self._digest)
+        if not self._secret.startswith("scrypt:"):
+            return hmac.compare_digest(_digest(given), _digest(self._secret))
+        parsed = parse_hash(self._secret)
+        if parsed is None:                    # fail closed: a hash is never a password
+            return False
+        n, r, p, salt, key = parsed
+        got = hashlib.scrypt(given.encode("utf-8", "surrogatepass"), salt=salt,
+                             n=n, r=r, p=p, maxmem=2**29, dklen=len(key))
+        return hmac.compare_digest(got, key)
 
-    def _new_session(self, client: str, now: float) -> str:   # caller holds the lock
-        for token, (expires, _client) in list(self._sessions.items()):
-            if expires <= now:
-                del self._sessions[token]
+    def _new_session(self, now: float) -> str:               # caller holds the lock
+        self._sessions = {t: e for t, e in self._sessions.items() if e > now}
         while len(self._sessions) >= MAX_SESSIONS:
-            oldest = min(self._sessions, key=lambda t: self._sessions[t][0])
-            del self._sessions[oldest]
+            del self._sessions[min(self._sessions, key=self._sessions.__getitem__)]
         token = secrets.token_urlsafe(32)
-        self._sessions[token] = (now + SESSION_TTL_SEC, client)
+        self._sessions[token] = now + SESSION_TTL_SEC
         return token
-
-
-class Hub:
-    """Hands the reader's frames to the stream threads.
-
-    publish() runs on the reader's main tick thread, the one that also writes
-    the recording. It encodes once, appends and notifies; it never touches a
-    socket and never raises, so no viewer can slow or break the recorder.
-    """
-
-    def __init__(self) -> None:
-        self._cond = threading.Condition()
-        self._seq = 0
-        # (seq, is_full, payload), filled only while someone is watching
-        self._ring: deque[tuple[int, bool, bytes]] = deque(maxlen=RING_SIZE)
-        self._last_full: Optional[bytes] = None
-        self._subs = 0
-        self._wake = 0
-        self._closed = False
-        self._failed = False
-
-    def publish(self, line: str, *, full: bool) -> None:
-        try:
-            payload = b"data: " + line.rstrip("\n").encode("utf-8", "replace") + b"\n\n"
-            with self._cond:
-                self._seq += 1
-                if full:
-                    self._last_full = payload
-                if self._subs:
-                    self._ring.append((self._seq, full, payload))
-                self._cond.notify_all()
-        except Exception:
-            if not self._failed:
-                self._failed = True
-                log.exception("live: publish failed (logged once; the recording is unaffected)")
-
-    @property
-    def subscribers(self) -> int:
-        with self._cond:
-            return self._subs
-
-    def subscribe(self, limit: int) -> Optional[tuple[int, int, Optional[bytes]]]:
-        """Admit one stream unless `limit` are open: (cursor, wake, newest full frame)."""
-        with self._cond:
-            if self._closed or self._subs >= limit:
-                return None
-            self._subs += 1
-            return self._seq, self._wake, self._last_full
-
-    def unsubscribe(self) -> None:
-        with self._cond:
-            self._subs -= 1
-            if self._subs == 0:
-                self._ring.clear()
-
-    def wait(self, cursor: int, wake: int,
-             timeout: float) -> tuple[str, list[tuple[int, bool, bytes]], int, int]:
-        """Block for a new frame, a kick()/close(), or `timeout` seconds.
-
-        Returns (status, events, cursor, wake). status is 'ok', 'gap' (the ring
-        overtook this reader, so frames are missing) or 'closed'.
-        """
-        with self._cond:
-            self._cond.wait_for(
-                lambda: self._seq > cursor or self._wake != wake or self._closed,
-                timeout=timeout)
-            if self._closed:
-                return "closed", [], cursor, self._wake
-            events = [e for e in self._ring if e[0] > cursor]
-            if self._seq > cursor and (not events or events[0][0] != cursor + 1):
-                return "gap", [], cursor, self._wake
-            return "ok", events, (events[-1][0] if events else cursor), self._wake
-
-    def kick(self) -> None:
-        """Wake every stream so it re-checks its session now."""
-        with self._cond:
-            self._wake += 1
-            self._cond.notify_all()
-
-    def close(self) -> None:
-        with self._cond:
-            self._closed = True
-            self._cond.notify_all()
-
-
-def pick(events: list[tuple[int, bool, bytes]]) -> list[tuple[int, bool, bytes]]:
-    """What a reader that fell behind still needs.
-
-    Every full frame, because each one carries the kill events that the kill
-    feed attributes, plus the newest position frame after the last full one.
-    Older position frames are superseded.
-    """
-    fulls = [e for e in events if e[1]]
-    last_full = fulls[-1][0] if fulls else -1
-    tail = [e for e in events if not e[1] and e[0] > last_full]
-    return fulls + tail[-1:]
 
 
 def _json(h: Any, code: int, obj: Any, extra: Optional[dict[str, str]] = None) -> None:
@@ -387,35 +367,57 @@ def _read_body(h: Any) -> Optional[bytes]:
     return body
 
 
-def _fmt_duration(seconds: float) -> str:
-    s = int(seconds)
-    return f"{s // 60}m{s % 60:02d}s"
+def round_meta(state: Any) -> dict:
+    """What the viewer needs to draw the timeline of the round being recorded."""
+    started = state.first_snap_ts or state.started_at.isoformat()
+    return {"id": state.path.stem, "startedAtUtc": started,
+            "latestUtc": state.last_snap_ts or started, "durationSec": 0}
 
 
-def config_path() -> Path:
-    """Where config.py reads the config from (config._load), kept in step by
-    hand: SIGHUP re-reads live_password alone and must not reset the cache
-    that every other key was read from."""
-    env = os.environ.get("SQREADER_CONFIG")
-    return Path(env) if env else Path.cwd() / "sqreader.config.json"
+class _Tail:
+    """The round's recording, read the way `tail -f` reads a file.
+
+    zstd's stream reader pulls its bytes from here. At the end of the file this
+    waits for the recorder's next frame instead of reporting the end, so a
+    frame the recorder is halfway through writing is simply finished on a
+    later poll. Only once `alive()` says the round is over, or the viewer may
+    no longer watch, does it report the end, after one last read for a frame
+    written in between.
+    """
+
+    def __init__(self, f: Any, alive: Callable[[], bool]) -> None:
+        self._f = f
+        self._alive = alive
+
+    def read(self, n: int = -1) -> bytes:
+        while True:
+            data = self._f.read(n)
+            if data:
+                return data
+            if not self._alive():
+                return self._f.read(n)
+            time.sleep(POLL_SEC)
+
+    def close(self) -> None:
+        self._f.close()
 
 
 class LiveMap:
-    """The /api/live/* endpoints, fed by the reader through publish()."""
+    """The /api/live/* endpoints."""
 
     def __init__(self, password: str) -> None:
-        self.hub = Hub()
         self.access = Access(password)
+        # The round being recorded (recorder.RecordingState) or None; cli.py
+        # points this at record_state_box["current"].
+        self.recording: Callable[[], Any] = lambda: None
+        self._streams_lock = threading.Lock()
+        self._streams = 0
         self._refused_lock = threading.Lock()
         self._refused_at = float("-inf")      # monotonic time of the last refusal log
 
-    def publish(self, line: str, *, full: bool) -> None:
-        self.hub.publish(line, full=full)
-
     def on_sighup(self, _signum: int, _frame: Any) -> None:
-        # Runs between two bytecodes of the main thread, which may be inside
-        # publish() or a log call. Taking locks here could deadlock, so a
-        # thread does the work.
+        # Runs between two bytecodes of the main thread, which may be inside a
+        # log call. Taking locks here could deadlock, so a thread does the work.
         try:
             threading.Thread(target=self.reload, name="sqreader-live-reload",
                              daemon=True).start()
@@ -423,21 +425,29 @@ class LiveMap:
             # No thread to be had (RuntimeError: can't start new thread), and an
             # exception here would surface in the reader's tick loop. Fail closed
             # on the spot, without logging. Safe from the signal context: the
-            # main thread never holds Access._lock, and the hub's Condition
-            # is re-entrant.
+            # main thread never holds Access._lock. Open round streams notice
+            # within POLL_SEC.
             self.access.reset(None)
-            self.hub.kick()
 
     def reload(self) -> None:
-        """Revoke every session and re-read live_password. Fails closed: a file
+        """Revoke every session and re-read the password. Fails closed: a file
         that cannot be read, or holds no valid password, disables logins.
 
-        The log says which of the three happened. A file that still holds the
-        old password (a Docker single-file bind mount keeps serving the old
-        inode after an editor replaced the file) is reported as UNCHANGED, and a
-        failure names its reason: an error TYPE or a rule, never a message, which
-        could quote the file, and never the value.
+        A hash in SQREADER_LIVE_PASSWORD_HASH wins, as at startup. The
+        environment of a running process never changes, so then this only
+        revokes, and says so. Otherwise the log says which of three things
+        happened. A file that still holds the old password (a Docker
+        single-file bind mount keeps serving the old inode after an editor
+        replaced the file) is reported as UNCHANGED, and a failure names its
+        reason: an error TYPE or a rule, never a message, which could quote the
+        file, and never the value.
         """
+        env = os.environ.get(ENV_HASH)
+        if env:
+            self.access.reset(validate_password(env, hash_only=True)[0])
+            log.warning("live: SIGHUP: all sessions revoked; password from %s is UNCHANGED "
+                        "(environment: change it with a restart between rounds)", ENV_HASH)
+            return
         path = None
         why = None
         try:
@@ -451,10 +461,8 @@ class LiveMap:
             why = type(exc).__name__
         password, reason = validate_password(value)
         if password is None and why is None:
-            why = (reason.removeprefix("live map disabled: ") if reason
-                   else "live_password is not set")
+            why = f"live_password {reason}" if reason else "live_password is not set"
         changed = self.access.reset(password)
-        self.hub.kick()
         if password is None:
             log.warning("live: SIGHUP: all sessions revoked; NO valid live_password in %s "
                         "(%s), logins disabled until fixed", path, why)
@@ -468,8 +476,8 @@ class LiveMap:
         if path == "/api/live/session":
             token = self.access.first_valid(cookie_values(h.headers))
             _json(h, 200, {"authenticated": token is not None})
-        elif path == "/api/live/stream":
-            self._stream(h)
+        elif path == "/api/live/round" or path.startswith("/api/live/round/"):
+            self._round(h, path[len("/api/live/round/"):])
         else:
             h.send_error(404, "no such endpoint")
 
@@ -519,66 +527,109 @@ class LiveMap:
     def _logout(self, h: Any, client: str, presented: list[str]) -> None:
         if self.access.revoke(presented):
             log.info("live: logout from %s", client)
-            self.hub.kick()
         _json(h, 200, {"authenticated": False},
               {"Set-Cookie": f"{COOKIE}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"})
 
-    def _stream(self, h: Any) -> None:
+    def _round(self, h: Any, rest: str) -> None:
+        """GET /api/live/round[/<id>[/meta]]. The session comes first, so a
+        stranger cannot even tell whether a round is being recorded."""
         token = self.access.first_valid(cookie_values(h.headers))
         if token is None:
             _json(h, 401, {"error": "not logged in"})
             return
+        state = self.recording()
+        rid, _, tail = rest.partition("/")
+        # The id is only ever compared, never used to find a file: there is one
+        # round to serve, and it is the recorder's.
+        if state is None or (rest and (urllib.parse.unquote(rid) != state.path.stem
+                                       or tail not in ("", "meta"))):
+            _json(h, 404, {"error": "no round in progress"})
+        elif not rest or tail == "meta":
+            _json(h, 200, round_meta(state))
+        else:
+            self._follow(h, token, state)
+
+    def _admit(self) -> Optional[int]:
+        """Take a stream slot: how many are open now, or None if all are taken."""
+        with self._streams_lock:
+            if self._streams >= MAX_STREAMS:
+                return None
+            self._streams += 1
+            return self._streams
+
+    def _release(self) -> None:
+        with self._streams_lock:
+            self._streams -= 1
+
+    def _follow(self, h: Any, token: str, state: Any) -> None:
+        """The round's frames from `from` on, then each new one as the recorder
+        appends it, until the round ends or the session does."""
         client = client_key(h.headers, h.client_address[0])
-        admitted = self.hub.subscribe(MAX_STREAMS)
-        if admitted is None:
+        try:
+            reader = SqrxReader(state.path)
+        except (OSError, ValueError):             # gone between the lookup and here
+            _json(h, 404, {"error": "no round in progress"})
+            return
+        n = self._admit()
+        if n is None:
+            reader.close()
             self._log_refused(client)
             _json(h, 503, {"error": "too many live viewers"}, {"Retry-After": "30"})
             return
-        cursor, wake, first = admitted
-        log.info("live: stream opened from %s (%d/%d)", client, self.hub.subscribers,
-                 MAX_STREAMS)
+        try:
+            from_ms = int((h._query().get("from") or ["0"])[0])
+        except ValueError:
+            from_ms = 0
+        # Never zstd passthrough: the file is still growing, and `from` drops lines.
+        gz = (zlib.compressobj(6, zlib.DEFLATED, 31)
+              if h._negotiate_encoding(allow_zstd=False) == "gzip" else None)
+        reason = "round ended"
+
+        def alive() -> bool:
+            nonlocal reason
+            if not self.access.valid(token):
+                reason = "session ended"
+                return False
+            return self.recording() is state
+
+        log.info("live: round stream opened from %s (%d/%d)", client, n, MAX_STREAMS)
         started = time.monotonic()
-        reason = "client gone"
         try:
             h.connection.settimeout(WRITE_TIMEOUT_SEC)
             # HTTP/1.0 (the handler's default, never switched here): the body is
             # delimited by the close, so neither Content-Length nor chunking.
             h.send_response(200)
-            h.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            h.send_header("Content-Type", "application/x-ndjson")
             h.send_header("Cache-Control", "no-store")
             h.send_header("X-Accel-Buffering", "no")
             h.send_header("Connection", "close")
+            if gz:
+                h.send_header("Content-Encoding", "gzip")
             h.end_headers()
-            h.wfile.write(f"retry: {RETRY_MS}\n\n".encode("ascii") + (first or b""))
-            last_write = time.monotonic()
-            while True:
-                idle = time.monotonic() - last_write
-                status, events, cursor, wake = self.hub.wait(
-                    cursor, wake, max(0.0, KEEPALIVE_SEC - idle))
-                if status == "closed":
-                    reason = "server stopping"
-                    break
-                if status == "gap":
-                    reason = "too slow"
-                    break
+            reader._f = _Tail(reader._f, alive)  # type: ignore[assignment]  # read/close suffice
+            lines = reader.lines()
+            for line in _replay_from(lines, from_ms) if from_ms > 0 else lines:
+                # Per line too: a long backlog never reaches the end of the file,
+                # where _Tail looks, and a logout must not wait for it.
                 if not self.access.valid(token):
                     reason = "session ended"
                     break
-                if events:
-                    h.wfile.write(b"".join(payload for _s, _f, payload in pick(events)))
-                    last_write = time.monotonic()
-                elif time.monotonic() - last_write >= KEEPALIVE_SEC:
-                    h.wfile.write(b": ka\n\n")
-                    last_write = time.monotonic()
+                data = line.encode("utf-8") + b"\n"
+                h.wfile.write(gz.compress(data) + gz.flush(zlib.Z_SYNC_FLUSH) if gz else data)
+            if gz:
+                h.wfile.write(gz.flush())
         except TimeoutError:
             reason = "write timeout"
         except OSError:
             reason = "client gone"
+        except zstd.ZstdError:
+            reason = "bad data"
         finally:
-            self.hub.unsubscribe()
+            reader.close()
+            self._release()
             h.close_connection = True
-            log.info("live: stream closed from %s after %s (%s)", client,
-                     _fmt_duration(time.monotonic() - started), reason)
+            log.info("live: round stream closed from %s after %dm%02ds (%s)", client,
+                     *divmod(int(time.monotonic() - started), 60), reason)
 
     def _log_refused(self, client: str) -> None:
         now = time.monotonic()
@@ -590,12 +641,40 @@ class LiveMap:
                     MAX_STREAMS, MAX_STREAMS)
 
 
-def live_from_config(value: Any) -> Optional[LiveMap]:
-    """The live map for this config value, or None, and then it does not exist."""
-    password, reason = validate_password(value)
-    if password is None:
+def live_from_config(value: Any, recordings_dir: Any) -> Optional[LiveMap]:
+    """The live map for this config value (or the environment's hash), or None,
+    and then it does not exist. It plays the round being recorded, so without
+    recordings there is nothing to show."""
+    secret, reason, source = password_from(value)
+    if secret is None:
         if reason:
-            log.warning("%s", reason)
+            log.warning("live map disabled: %s %s", source, reason)
         return None
-    log.info("live map enabled for moderators (login via ?mode=live)")
-    return LiveMap(password)
+    if recordings_dir is None:
+        log.warning("live map disabled: it needs --recordings-dir")
+        return None
+    log.info("live map enabled for moderators (password from %s)", source)
+    return LiveMap(secret)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """`python3 -m sqreader.live hash`: print the hash for SQREADER_LIVE_PASSWORD_HASH
+    (or live_password). Asks twice, never echoes, never prints the password."""
+    import getpass
+    args = sys.argv[1:] if argv is None else argv
+    if args != ["hash"]:
+        print("usage: python3 -m sqreader.live hash", file=sys.stderr)
+        return 2
+    first = getpass.getpass("live map password: ")
+    if getpass.getpass("again: ") != first:
+        print("the two entries differ", file=sys.stderr)
+        return 1
+    if not first or first != first.strip() or first.startswith("scrypt:"):
+        print("unusable: empty, padded with whitespace, or a hash already", file=sys.stderr)
+        return 1
+    print(hash_password(first))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

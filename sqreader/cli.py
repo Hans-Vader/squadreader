@@ -934,9 +934,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
             if (cand / "index.html").is_file():
                 frontend_dir = cand
                 break
-    # Fork-only moderator live map: None (absent) unless live_password is set.
+    # Fork-only moderator live map: None (absent) unless a live password is set
+    # and rounds are recorded: it plays the round being recorded.
     from .live import live_from_config
-    live = live_from_config(config.get("live_password"))
+    live = live_from_config(config.get("live_password"), recordings_dir)
     srv = serve_in_background(args.host, args.port, beat,
                               recordings_dir=recordings_dir,
                               icons_dir=icons_dir,
@@ -1050,6 +1051,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         "tick_sequence_required": True,
         "missing_tick_warned": False,
     }
+    if live is not None:
+        live.recording = lambda: record_state_box["current"]
     record_filename_buffer: list = []
     # Scanner-health streak counter. STABILITY-FIRST: a genuine suspicion
     # triggers an in-process cache reset, NEVER a process exit (see the
@@ -1094,8 +1097,6 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 log_tailer.drain(), snap.get("players") or [])
         line = json.dumps(snap, ensure_ascii=False) + "\n"
         beat.mark()
-        if live is not None:
-            live.publish(line, full=True)
         if out_f:
             out_f.write(line)
             out_f.flush()
@@ -1169,8 +1170,6 @@ def cmd_serve(args: argparse.Namespace) -> int:
                         pos = sample_positions(pm, paths, entities, tick, ts)
                         pos_line = json.dumps(pos, ensure_ascii=False) + "\n"
                         beat.mark()
-                        if live is not None:
-                            live.publish(pos_line, full=False)
                         if out_f:
                             out_f.write(pos_line)
                             out_f.flush()

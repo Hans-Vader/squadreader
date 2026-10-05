@@ -61,15 +61,15 @@
   "push_backlog_dir": null,
 
   "_live_comment": [
-    "Moderator-only LIVE map. OFF unless live_password is set.",
+    "Moderator-only LIVE map. OFF unless live_password (or SQREADER_LIVE_PASSWORD_HASH) is set.",
     "Whoever knows it sees BOTH teams in real time: give it to moderators only.",
-    "One shared password, at least 20 characters, e.g.",
-    "  python3 -c 'import secrets; print(secrets.token_urlsafe(24))'",
-    "It is a CREDENTIAL: chmod 600 this file.",
-    "Moderators log in at https://<site>/?mode=live (HTTPS required).",
+    "Best a hash from `python3 -m sqreader.live hash` (a line starting with scrypt:);",
+    "a plain-text password works too. Either way it is a CREDENTIAL: chmod 600 this file.",
+    "Moderators log in from the start page, or at https://<site>/?mode=live (HTTPS required).",
     "Change it or kick everyone out without a restart: edit it, then send SIGHUP.",
     "Under Docker, edit this file IN PLACE (a replaced file is not seen); see docs/live-map.md.",
-    "See docs/live-map.md."
+    "Needs --recordings-dir: the live map plays the round being recorded."
   ],
+
   "live_password": null
 }

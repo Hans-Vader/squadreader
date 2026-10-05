@@ -1,26 +1,40 @@
-// Moderator live map: login dialog, stream hook, and the Home + TopBar buttons.
-// Fork-only (docs/superpowers/specs/2026-09-29-live-moderation-design.md).
+// Moderator live map: login dialog, the Home + TopBar buttons, and the live
+// edge of the replay player. Fork-only. The live map IS a replay, of the round
+// being recorded right now, which keeps growing while it plays. Design:
+// docs/superpowers/specs/2026-10-05-live-replay-design.md; login and sessions:
+// docs/superpowers/specs/2026-09-29-live-moderation-design.md.
 // Renders nothing unless the server has the live map enabled: without it,
 // GET ./api/live/session answers 404 and the public UI stays as it is.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { create } from "zustand";
 import { useViewerStore } from "../state/viewerStore";
-import { createLiveFeed, login, logout, probeSession, type LiveAccessState } from "./client";
+import { replayClock } from "../state/replayClock";
+import { isLiveId, LIVE_DELAY_MS, LIVE_ID_PREFIX } from "../api/recordings";
+import {
+  edgeStep, fetchLiveRound, isAtLive, login, logout, probeSession, shouldAdvanceRound,
+  type LiveAccessState,
+} from "./client";
 import "./live.css";
 
-const RECONNECT_MS = 5000;
+const RETRY_MS = 5000;       // between "is a round being recorded yet?" asks
+const RECONNECT_MS = 3000;   // before re-opening a stream that dropped mid-round
+const TICK_MS = 250;         // how often the live edge looks at the player
 
 interface LiveStore {
   access: LiveAccessState;
   loginOpen: boolean;
   notice: string | null;
+  /** In the live map, but no round is being recorded right now. */
+  waiting: boolean;
+  /** The playhead is at the live edge. */
+  atLive: boolean;
 }
 
-const useLive = create<LiveStore>(() => ({ access: "unknown", loginOpen: false, notice: null }));
+const useLive = create<LiveStore>(() => ({
+  access: "unknown", loginOpen: false, notice: null, waiting: false, atLive: false,
+}));
 
-// Frames of whatever was shown before, a replay say, must not seed the live
-// kill-feed diff: useKillFeed reads curSnap on the mode flip.
-const EMPTY_FRAMES = { curSnap: null, prevSnap: null, lastInProgressTeams: null, curArrivalMs: 0 };
+let retryTimer = 0;
 
 function setUrlMode(mode: "live" | null): void {
   const url = new URL(window.location.href);
@@ -34,64 +48,137 @@ function openLogin(notice: string | null = null): void {
   useLive.setState({ loginOpen: true, notice });
 }
 
-export function enterLive(): void {
-  useViewerStore.setState({ ...EMPTY_FRAMES, status: "connecting" });
-  useViewerStore.getState().setMode("live");
-  setUrlMode("live");
+/** Still waiting for a round, and not gone off to watch a finished match meanwhile. */
+function stillWaiting(): boolean {
+  const s = useViewerStore.getState();
+  const pastMatch = s.mode === "replay" && s.replay.id !== null && !isLiveId(s.replay.id);
+  return useLive.getState().waiting && !pastMatch;
 }
 
 export function exitLive(): void {
+  window.clearTimeout(retryTimer);
+  useLive.setState({ waiting: false });
+  useViewerStore.getState().openReplay(null);
   useViewerStore.getState().setMode("home");
   setUrlMode(null);
 }
 
-function useLiveStream(): void {
-  const mode = useViewerStore((s) => s.mode);
+function sessionLost(): void {
+  useLive.setState({ access: "anon" });
+  exitLive();
+  openLogin("Sitzung abgelaufen – bitte neu anmelden.");
+}
+
+/**
+ * To the live edge of the running round. One way in for everything: the Home
+ * button, a reload on ?mode=live, the LIVE button, and the next round.
+ */
+export async function goLive(): Promise<void> {
+  window.clearTimeout(retryTimer);
+  const round = await fetchLiveRound();
+  if (round === "anon") { sessionLost(); return; }
+  const v = useViewerStore.getState();
+  setUrlMode("live");
+  if (!round) {
+    // Between rounds. Whatever is on screen stays: the start page, or the end
+    // of the last round. The banner says why nothing happens.
+    useLive.setState({ waiting: true });
+    retryTimer = window.setTimeout(() => { if (stillWaiting()) void goLive(); }, RETRY_MS);
+    return;
+  }
+  useLive.setState({ waiting: false });
+  const id = LIVE_ID_PREFIX + round.id;
+  const from = round.latestMs - LIVE_DELAY_MS;
+  const r = v.replay;
+  if (r.id !== id) {
+    // Four store updates in one task, which React renders once. Even if it did
+    // not, restartReplayAt's nonce bump aborts a load that began at minute zero.
+    v.openReplay(id);
+    v.setReplay((x) => ({ ...x, playing: true }));
+    v.restartReplayAt(from);
+    v.setMode("replay");
+  } else if (r.loading && r.bufferedMs >= round.latestMs - 3000) {
+    // The edge is already held: go there without loading anything.
+    const target = r.bufferedMs - LIVE_DELAY_MS;
+    let i = r.frameCount - 1;
+    while (i > 0 && Date.parse(r.frames[i]!.timestamp ?? "") > target) i--;
+    v.setReplay((x) => ({ ...x, currentIdx: i, speed: 1, playing: true,
+                          baseWallMs: 0, baseSnapMs: 0 }));
+    if (v.mode !== "replay") v.setMode("replay");
+  } else {
+    v.setReplay((x) => ({ ...x, speed: 1, playing: true }));
+    v.restartReplayAt(from);
+    if (v.mode !== "replay") v.setMode("replay");
+  }
+}
+
+/**
+ * The live edge, for as long as a live round is open: 1x once caught up,
+ * rebuffer at the edge, light the LIVE button, and when the stream closes find
+ * out why: logged out, dropped, or the round is over.
+ */
+function useLiveEdge(): void {
+  const id = useViewerStore((s) => s.replay.id);
   useEffect(() => {
-    if (mode !== "live") return;
-    const store = useViewerStore.getState;
-    let es: EventSource | null = null;
+    if (!isLiveId(id)) { useLive.setState({ atLive: false }); return; }
+    let pausedForBuffer = false;
+    let wasLoading = true;
+    let roundOver = false;
     let timer = 0;
-    let stopped = false;
+    const tick = () => {
+      const s = useViewerStore.getState();
+      const r = s.replay;
+      if (r.id !== id) return;
+      const lagMs = replayClock.valid ? r.bufferedMs - replayClock.ms : Infinity;
+      switch (edgeStep({ playing: r.playing, stalled: r.stalled, speed: r.speed, lagMs,
+                         pausedForBuffer })) {
+        case "slow":
+          s.setReplay((x) => ({ ...x, speed: 1, baseWallMs: 0, baseSnapMs: 0 }));
+          break;
+        case "buffer":
+          pausedForBuffer = true;
+          s.setReplay((x) => ({ ...x, playing: false }));
+          break;
+        case "resume":
+          pausedForBuffer = false;
+          s.setReplay((x) => ({ ...x, playing: true, stalled: false,
+                                baseWallMs: 0, baseSnapMs: 0 }));
+          break;
+        case "unstall":
+          s.setReplay((x) => ({ ...x, stalled: false }));
+          break;
+      }
+      if (!r.stalled) pausedForBuffer = false;
+      const atLive = isAtLive(r.playing, lagMs);
+      if (useLive.getState().atLive !== atLive) useLive.setState({ atLive });
 
-    const connect = (): void => {
-      const feed = createLiveFeed();
-      const source = new EventSource("./api/live/stream");
-      es = source;
-      source.onopen = () => store().setStatus("live");
-      source.onmessage = (ev: MessageEvent) => {
-        if (store().mode !== "live") return;
-        const snap = feed.push(String(ev.data));
-        if (snap) store().ingestLive(snap);
-      };
-      source.onerror = () => {
-        store().setStatus("reconnecting");
-        if (source.readyState !== EventSource.CLOSED) return;   // the browser retries itself
-        source.close();
-        es = null;
-        void probeSession().then((access) => {
-          if (stopped) return;
-          if (access === "anon") {
-            useLive.setState({ access: "anon" });
-            exitLive();
-            openLogin("Sitzung abgelaufen – bitte neu anmelden.");
-            return;
+      if (wasLoading && !r.loading) {
+        void fetchLiveRound().then((round) => {
+          if (useViewerStore.getState().replay.id !== id) return;
+          if (round === "anon") {
+            sessionLost();
+          } else if (round && LIVE_ID_PREFIX + round.id === id) {
+            // Same round, so the connection dropped: carry on where the playhead is.
+            timer = window.setTimeout(() => {
+              const now = useViewerStore.getState();
+              if (now.replay.id !== id || now.replay.loading) return;
+              if (now.replay.frameCount) now.restartReplayAt(replayClock.ms);
+              else void goLive();
+            }, RECONNECT_MS);
+          } else {
+            roundOver = true;
           }
-          // "ok", "unknown" (proxy or server hiccup) and "off" (Traefik's 404
-          // while the container restarts) all mean: try again shortly.
-          timer = window.setTimeout(connect, RECONNECT_MS);
         });
-      };
+      }
+      wasLoading = r.loading;
+      if (roundOver && shouldAdvanceRound(r.frameCount, r.currentIdx, r.playing)) {
+        roundOver = false;
+        void goLive();
+      }
     };
-
-    connect();
-    return () => {
-      stopped = true;
-      window.clearTimeout(timer);
-      es?.close();
-      useViewerStore.setState({ ...EMPTY_FRAMES });
-    };
-  }, [mode]);
+    const iv = window.setInterval(tick, TICK_MS);
+    return () => { window.clearInterval(iv); window.clearTimeout(timer); };
+  }, [id]);
 }
 
 function LoginDialog() {
@@ -140,7 +227,7 @@ function LoginDialog() {
       return;
     }
     useLive.setState({ access: "ok", loginOpen: false, notice: null });
-    enterLive();
+    void goLive();
   };
 
   return (
@@ -177,10 +264,23 @@ function LoginDialog() {
   );
 }
 
+function WaitingBanner() {
+  const waiting = useLive((s) => s.waiting);
+  const mode = useViewerStore((s) => s.mode);
+  const id = useViewerStore((s) => s.replay.id);
+  if (!waiting || !(mode === "home" || (mode === "replay" && isLiveId(id)))) return null;
+  return (
+    <div id="live-waiting" className="buf-banner" role="status">
+      <span className="buf-spin" />
+      <span>Warte auf die nächste Runde…</span>
+    </div>
+  );
+}
+
 // Mounted once in App, outside the mode branch.
 export function LiveAccess() {
   const access = useLive((s) => s.access);
-  useLiveStream();
+  useLiveEdge();
 
   useEffect(() => {
     let cancelled = false;
@@ -188,28 +288,37 @@ export function LiveAccess() {
       if (cancelled) return;
       useLive.setState({ access: a });
       if (new URL(window.location.href).searchParams.get("mode") !== "live") return;
-      if (a === "ok") enterLive();
+      if (a === "ok") void goLive();
       else if (a === "anon") openLogin();
       else if (a === "off") setUrlMode(null);
     });
     return () => { cancelled = true; };
   }, []);
 
-  if (access !== "anon" && access !== "ok") return null;
-  return <LoginDialog />;
+  return (
+    <>
+      <WaitingBanner />
+      {(access === "anon" || access === "ok") && <LoginDialog />}
+    </>
+  );
 }
 
-// Home nav: only for a logged-in moderator.
+// Home nav: the way in. Nothing at all when the server has no live map.
 export function LiveEntry() {
   const access = useLive((s) => s.access);
+  if (access === "anon") {
+    return <button className="btn btn-ghost" onClick={() => openLogin()}>Moderator-Login</button>;
+  }
   if (access !== "ok") return null;
-  return <button className="btn btn-ghost" onClick={enterLive}>Live-Karte</button>;
+  return <button className="btn btn-ghost" onClick={() => { void goLive(); }}>Live-Karte</button>;
 }
 
-// TopBar, live mode only.
+// TopBar, while the live map is shown.
 export function LiveControls() {
   const mode = useViewerStore((s) => s.mode);
-  if (mode !== "live") return null;
+  const id = useViewerStore((s) => s.replay.id);
+  const atLive = useLive((s) => s.atLive);
+  if (mode !== "replay" || !isLiveId(id)) return null;
   const signOut = async () => {
     await logout();
     useLive.setState({ access: "anon" });
@@ -218,6 +327,9 @@ export function LiveControls() {
   return (
     <>
       <button className="tb-back" onClick={exitLive} title="zur Startseite">← Zurück</button>
+      <button className={"live-edge" + (atLive ? " on" : "")} disabled={atLive}
+              onClick={() => { void goLive(); }}
+              title={atLive ? "live" : "zum Live-Rand springen"}>● LIVE</button>
       <button onClick={() => { void signOut(); }} title="Live-Sitzung beenden">Abmelden</button>
     </>
   );

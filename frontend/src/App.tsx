@@ -33,7 +33,7 @@ import { LiveAccess } from "./live/LiveAccess";
 export default function App() {
   const mode = useViewerStore((s) => s.mode);
   const setMode = useViewerStore((s) => s.setMode);
-  const setReplay = useViewerStore((s) => s.setReplay);
+  const openReplay = useViewerStore((s) => s.openReplay);
 
   // Boot from URL params (one-shot on mount): `?mode=replay&id=...`
   // → flip to replay and seed the replay slice. The picker auto-opens
@@ -46,9 +46,7 @@ export default function App() {
     const id = url.searchParams.get("id");
     if (m === "replay") {
       if (id) {
-        setReplay((r) => ({ ...r, id, frames: [], currentIdx: 0,
-                            playing: false, speed: 1,
-                            baseWallMs: 0, baseSnapMs: 0 }));
+        openReplay(id);
         setMode("replay");
       } else {
         setMode("replay");
@@ -118,11 +116,17 @@ export default function App() {
   //   Esc      — close any open detail panel + scoreboard
   //   Tab      — toggle scoreboard (Squad in-game convention).
   //              preventDefault so focus doesn't jump between buttons.
+  //   , / .    — one recorded frame back / forward, paused (YouTube's keys).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Don't intercept while a text input is focused.
-      const tag = (e.target as HTMLElement | null)?.tagName ?? "";
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      // Don't intercept while a TEXT input is focused. The timeline scrubber
+      // is an input too, but nobody types into a slider — and it keeps focus
+      // after every drag, so treating it as text silently disabled Space and
+      // frame stepping until the user clicked somewhere else.
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName ?? "";
+      const isSlider = tag === "INPUT" && (el as HTMLInputElement).type === "range";
+      if ((tag === "INPUT" && !isSlider) || tag === "TEXTAREA") return;
       if (e.key === "Escape") {
         setSelectedVehicleId(null);
         setSelectedPlayerKey(null);
@@ -135,19 +139,27 @@ export default function App() {
       } else if (e.key === "g" || e.key === "G") {
         // Ticket-loss timeline (replay only).
         const s = useViewerStore.getState();
-        if (s.mode === "replay" && s.replay.frames.length) toggleTimeline();
+        if (s.mode === "replay" && s.replay.frameCount) toggleTimeline();
       } else if (e.key === " " || e.code === "Space") {
         // Space toggles play/pause in replay mode; ignored in live.
         const s = useViewerStore.getState();
-        if (s.mode === "replay" && s.replay.frames.length) {
+        if (s.mode === "replay" && s.replay.frameCount) {
           e.preventDefault();
           s.setReplay((r) => ({
             ...r,
             playing: !r.playing,
             baseWallMs: 0, baseSnapMs: 0,
-            currentIdx: r.currentIdx >= r.frames.length - 1
+            // Only a finished recording rewinds; at the download frontier
+            // this would throw away everything watched so far.
+            currentIdx: (r.currentIdx >= r.frameCount - 1 && !r.loading)
               ? 0 : r.currentIdx,
           }));
+        }
+      } else if (e.key === "," || e.key === ".") {
+        const s = useViewerStore.getState();
+        if (s.mode === "replay" && s.replay.frameCount) {
+          e.preventDefault();
+          s.stepReplayFrame(e.key === "," ? -1 : 1);
         }
       }
     };

@@ -104,13 +104,18 @@ DEFAULTS: dict[str, Any] = {
 _cache: dict[str, Any] | None = None
 
 
+def config_path() -> Path:
+    """Where the config is read from: $SQREADER_CONFIG, else ./sqreader.config.json."""
+    env = os.environ.get("SQREADER_CONFIG")
+    return Path(env) if env else Path.cwd() / "sqreader.config.json"
+
+
 def _load() -> dict[str, Any]:
     global _cache
     if _cache is not None:
         return _cache
     cfg = dict(DEFAULTS)
-    env = os.environ.get("SQREADER_CONFIG")
-    path = Path(env) if env else Path.cwd() / "sqreader.config.json"
+    path = config_path()
     if path.is_file():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -239,4 +244,4 @@ def find_squad_server_pid() -> int:
     raise SystemExit(f"no {proc} process running")
 
 
-__all__ = ["DEFAULTS", "get", "find_squad_server_pid"]
+__all__ = ["DEFAULTS", "config_path", "get", "find_squad_server_pid"]

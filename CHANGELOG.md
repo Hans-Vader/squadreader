@@ -7,6 +7,14 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Modded and Steam Workshop maps can be given a minimap. The bundled map table
+  is built from sources that only know the stock layers, so a workshop map
+  recorded fine but played back over a bare grid. An optional
+  `data/static/custom_maps.json` now fills that in, keyed by map name rather
+  than layer name - one entry covers every RAAS/AAS/Invasion/Seed layer of a
+  mod, and the match ignores case, spaces and underscores because how the game
+  spells a modded layer is not knowable until it has run once. See the README
+  for the format and for where the two corner numbers come from.
 - The reader can run in its own container beside a Squad server you already
   run, reading the game's memory across the container boundary. Getting there
   by hand is a research project - the game process lives in another PID

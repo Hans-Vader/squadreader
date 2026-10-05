@@ -25,11 +25,14 @@ started with a `recordings_dir` (passed through from
 """
 from __future__ import annotations
 
+import datetime
 import http.server
 import json
+import logging
 import os
 import re
 import socketserver
+import sys
 import threading
 import time
 import urllib.parse
@@ -79,6 +82,18 @@ _ICON_MIME = {
 # the bare basename (no path, no extension). Restrict to safe chars.
 _SQMAP_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _SQMAP_EXTS = (".webp", ".png", ".jpg", ".jpeg")
+
+log = logging.getLogger(__name__)
+
+# Sent with the SPA document only. Player names read out of game memory end up
+# in the JSON the viewer renders, so a future DOM-injection bug there should be
+# a console error, not script execution: no unsafe-inline anywhere. base-uri
+# matters because Vite builds with base "./": every asset URL is
+# document-relative.
+_SPA_CSP = (
+    "default-src 'self'; object-src 'none'; base-uri 'none'; "
+    "frame-ancestors 'none'; form-action 'self'"
+)
 
 
 class _TickBeat:
@@ -338,10 +353,68 @@ def _resolve_sqmap(sqmaps_dir: Path, name: str) -> Optional[Path]:
         seen.add(stem)
         for ext in _SQMAP_EXTS:
             p = sqmaps_dir / f"{stem}{ext}"
-            if p.is_file():
+            # os.path.isfile, not Path.is_file: this resolver has no response
+            # to send, and is_file() re-raises EACCES — an unreadable sqmaps
+            # directory would escape _handle_sqmap instead of 404ing.
+            if os.path.isfile(p):
                 return p
     return None
 
+
+
+def _replay_ts_ms(line: str) -> "int | None":
+    """A recording line's timestamp, without parsing the whole line.
+
+    A seek walks the file to find where to start, and json.loads on every line
+    of a quarter-gigabyte recording is seconds of CPU per request. The
+    timestamp is a fixed-shape ISO string, so finding it is a substring search.
+    """
+    at = line.find('"timestamp"')
+    if at < 0:
+        return None
+    start = line.find('"', at + 11)
+    if start < 0:
+        return None
+    end = line.find('"', start + 1)
+    if end < 0:
+        return None
+    try:
+        return int(datetime.datetime.fromisoformat(
+            line[start + 1:end]).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
+def _replay_from(lines, from_ms: int):
+    """Drop everything before the first FULL frame at or after `from_ms`.
+
+    It must be a FULL frame: a two-tier recording interleaves compact
+    ``{"t":"pos"}`` position frames that mean nothing alone — the viewer folds
+    them onto the last full frame it saw. Starting on one would hand the client
+    a delta against a frame it was never sent.
+    """
+    started = False
+    last_full = None
+    for line in lines:
+        if not started:
+            head = line[:24]
+            if '"t":"pos"' in head or '"t": "pos"' in head:
+                continue
+            ts = _replay_ts_ms(line)
+            if ts is None:
+                continue
+            if ts < from_ms:
+                last_full = line          # remembered in case we overshoot
+                continue
+            started = True
+        yield line
+    if not started and last_full is not None:
+        # A seek PAST the end of the recording — easy to reach, because the
+        # timeline's length comes from the match row and a recording can stop
+        # before the round does. An empty body would reach the viewer as a
+        # failed load; the honest answer to "start after the match ended" is
+        # its last frame.
+        yield last_full
 
 def _make_handler(
     heartbeat: _TickBeat,
@@ -385,6 +458,35 @@ def _make_handler(
         # silence stdlib's per-request logging — too noisy at 5 Hz
         def log_message(self, *_args) -> None:
             pass
+
+        # stdlib's default is "BaseHTTP/0.6 Python/3.x.y" — the interpreter
+        # patch level, on every response, through the proxy and all.
+        def version_string(self) -> str:
+            return "sqreader"
+
+        # Every response path ends here, stdlib's send_error included, so this
+        # is the one place a header for all of them can live.
+        def end_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            super().end_headers()
+
+        def _stats_500(self, e: Exception) -> None:
+            # The exception goes to the operator's log, not into the anonymous
+            # client's status line. log_message is a no-op, so without this a
+            # failing stats DB was invisible server-side.
+            #
+            # A client that hung up mid-response is NOT a stats failure: the
+            # body is written inside the same try as the query, so its
+            # BrokenPipeError lands here. Logging it would bury the signal this
+            # helper exists to raise under routine disconnects, and send_error
+            # would append a second status line to a response that already
+            # sent 200.
+            if isinstance(e, ConnectionError):
+                return
+            # Attacker-controlled, and stdlib accepts a 64KB request line,
+            # while the reader's own container log has no rotation policy.
+            log.warning("stats query failed on %s: %r", self.path[:200], e)
+            self.send_error(500, "stats query failed")
 
         def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
             path = self.path.split("?", 1)[0]
@@ -544,9 +646,23 @@ def _make_handler(
                 self.send_error(400, "icon path escapes root")
                 return
             try:
+                # is_file() belongs INSIDE the try: pathlib ignores ENOENT and
+                # friends but re-raises EACCES, and the wrong-uid mount below
+                # is usually an unreadable DIRECTORY — stat() needs only search
+                # permission on the parent, so a mode-000 file still answers
+                # is_file() while a mode-000 category directory raises. Outside
+                # the try that escapes the handler: no response at all, plus a
+                # traceback, which is what this branch exists to prevent.
+                if not resolved.is_file():
+                    self.send_error(404, "no such icon")
+                    return
                 st = resolved.stat()
                 body = resolved.read_bytes()
-            except FileNotFoundError:
+            except OSError as e:
+                # It exists but will not open: a mount with the wrong uid, not
+                # a missing icon. Still a 404 to the client, but the operator
+                # gets the reason rather than a silently iconless UI.
+                log.warning("cannot read icon %s: %r", resolved, e)
                 self.send_error(404, "no such icon")
                 return
             etag = f'W/"{int(st.st_mtime)}-{st.st_size}"'
@@ -659,15 +775,27 @@ def _make_handler(
             else:
                 self.send_error(404, "no such SPA path")
                 return
+            # `.` and `..` pass the asset charset regex and name a directory.
+            # Rejecting by what the path IS beats catching whatever read_bytes
+            # happens to raise; _resolve_sqmap already gates on is_file().
+            # Inside the try, though — see _handle_icon for why EACCES makes
+            # is_file() itself the thing that raises.
             try:
+                if not target.is_file():
+                    self.send_error(404, f"not found: {target.name}")
+                    return
                 body = target.read_bytes()
-            except FileNotFoundError:
+            except OSError as e:
+                # Unreadable rather than absent — see _handle_icon.
+                log.warning("cannot read %s: %r", target, e)
                 self.send_error(404, f"not found: {target.name}")
                 return
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", cache)
+            if ctype.startswith("text/html"):
+                self.send_header("Content-Security-Policy", _SPA_CSP)
             self.end_headers()
             self.wfile.write(body)
 
@@ -713,7 +841,7 @@ def _make_handler(
                 from .stats import search_players
                 self._send_json(search_players(db, q, limit))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_player_profile(self, tail: str) -> None:
             db = self._stats_db_or_404()
@@ -727,7 +855,7 @@ def _make_handler(
                 from .stats import player_profile
                 prof = player_profile(db, eos)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
                 return
             if prof is None:
                 self.send_error(404, "no such player")
@@ -749,7 +877,7 @@ def _make_handler(
                 from .stats import leaderboard
                 self._send_json(leaderboard(db, stat, limit, period))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_weapon_meta(self) -> None:
             db = self._stats_db_or_404()
@@ -765,7 +893,7 @@ def _make_handler(
                 from .stats import weapon_meta
                 self._send_json(weapon_meta(db, period, limit))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_layers(self) -> None:
             db = self._stats_db_or_404()
@@ -775,7 +903,7 @@ def _make_handler(
                 from .stats import layers_with_kills
                 self._send_json(layers_with_kills(db))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_matches(self) -> None:
             db = self._stats_db_or_404()
@@ -791,7 +919,7 @@ def _make_handler(
                 from .stats import list_matches
                 self._send_json(list_matches(db, limit, period))
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         def _handle_match_detail(self, tail: str) -> None:
             db = self._stats_db_or_404()
@@ -805,7 +933,7 @@ def _make_handler(
                 from .stats import match_detail
                 out = match_detail(db, match_id)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
                 return
             if out is None:
                 self.send_error(404, "no such match")
@@ -845,7 +973,7 @@ def _make_handler(
                 out["bounds"] = _layer_bounds(out.get("layerName"))
                 self._send_json(out)
             except Exception as e:
-                self.send_error(500, f"stats query failed: {e!r}")
+                self._stats_500(e)
 
         # ---------- /api/recordings ----------
 
@@ -952,7 +1080,19 @@ def _make_handler(
             # 404s everything else — so zstd passthrough and long-lived caching
             # are always safe.
             finalized = True
-            enc = self._negotiate_encoding(allow_zstd=finalized)
+            # Start the stream part-way in, at an epoch-ms point on the match
+            # clock. There is no Range support here and none is possible: the
+            # body is a compressed stream with no index, so a byte offset means
+            # nothing. Walking the file locally costs a fraction of a second
+            # and saves the viewer downloading everything before the point
+            # somebody clicked.
+            try:
+                from_ms = int((self._query().get("from") or ["0"])[0])
+            except (TypeError, ValueError):
+                from_ms = 0
+            # zstd is served by handing the stored frames over untouched, which
+            # cannot be done when the point is to leave some of them out.
+            enc = self._negotiate_encoding(allow_zstd=finalized and from_ms <= 0)
 
             etag: str | None = None
             if finalized:
@@ -960,7 +1100,13 @@ def _make_handler(
                 # Encoding is part of the representation, so it is baked into the
                 # ETag (belt-and-suspenders with Vary: Accept-Encoding below, so a
                 # shared cache can't hand a gzip body to a zstd-expecting client).
-                etag = f'"{rec_id}-{_st.st_size}-{_st.st_mtime_ns}-{enc}"'
+                # `from` belongs in the tag too: a seeked body and a whole
+                # one differ only by a query string. Only when there IS one,
+                # though — adding a suffix to every tag would invalidate the
+                # cached copy in every viewer that already has one, for a
+                # response whose bytes have not changed.
+                etag = (f'"{rec_id}-{_st.st_size}-{_st.st_mtime_ns}-{enc}'
+                        + (f'-f{from_ms}' if from_ms > 0 else '') + '"')
                 if self.headers.get("If-None-Match") == etag:
                     self.send_response(304)
                     self.send_header("ETag", etag)
@@ -1028,15 +1174,17 @@ def _make_handler(
                     if enc == "zstd":
                         for raw in r.raw_body():
                             _chunk(raw)
-                    elif enc == "gzip":
-                        co = zlib.compressobj(
-                            _REPLAY_GZIP_LEVEL, zlib.DEFLATED, 31)  # 31 → gzip
-                        for line in r:
-                            _chunk(co.compress(line.encode("utf-8") + b"\n"))
-                        _chunk(co.flush())  # Z_FINISH: emit gzip trailer
-                    else:  # identity — original behavior
-                        for line in r:
-                            _chunk(line.encode("utf-8") + b"\n")
+                    else:
+                        kept = _replay_from(r, from_ms) if from_ms > 0 else r
+                        if enc == "gzip":
+                            co = zlib.compressobj(
+                                _REPLAY_GZIP_LEVEL, zlib.DEFLATED, 31)  # 31 → gzip
+                            for line in kept:
+                                _chunk(co.compress(line.encode("utf-8") + b"\n"))
+                            _chunk(co.flush())  # Z_FINISH: emit gzip trailer
+                        else:  # identity — original behavior
+                            for line in kept:
+                                _chunk(line.encode("utf-8") + b"\n")
                 if chunked:
                     self.wfile.write(b"0\r\n\r\n")
                 self.wfile.flush()
@@ -1058,6 +1206,17 @@ class _ThreadingHTTPServer(socketserver.ThreadingMixIn,
                            http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def handle_error(self, request, client_address) -> None:
+        # A client that hangs up mid-response — closing the tab on the SPA
+        # bundle, a map texture, a replay — leaves data unread in its receive
+        # buffer and so hangs up with RST, which surfaces in the write. Normal,
+        # but stdlib prints a full traceback for it, which would bury real
+        # errors in the container log. The handler silences its own per-request
+        # logging; this is the same noise one layer up. Only the replay body
+        # catches this itself; every other write path lands here.
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
 
 def serve_in_background(host: str, port: int, heartbeat: _TickBeat,

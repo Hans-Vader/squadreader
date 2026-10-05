@@ -7,6 +7,7 @@ import { useViewerStore } from "../state/viewerStore";
 import { ClipRecorder } from "./ClipRecorder";
 import { SettingsMenu } from "./SettingsMenu";
 import { LiveControls } from "../live/LiveAccess";
+import { fmtDayMonth } from "../format";
 
 export function TopBar() {
   const status = useViewerStore((s) => s.status);
@@ -29,10 +30,7 @@ export function TopBar() {
   const matchDate = (() => {
     const ts = curSnap?.timestamp;
     if (!ts) return null;
-    const d = new Date(ts);
-    return isNaN(d.getTime())
-      ? null
-      : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return fmtDayMonth(ts);
   })();
 
   // How long since data last ARRIVED. Measured on our own clock (arrival time,

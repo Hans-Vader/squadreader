@@ -13,6 +13,7 @@ import { arrowEnd, markerShape } from "./markerGeometry";
 import { drawProjectilesAndImpacts } from "./projectiles";
 import { coord, viewWindow, worldToScreen } from "./worldToScreen";
 import { visibleCaps } from "./capVisibility";
+import { capOccupancy } from "./capOccupancy";
 import { fallbackMap } from "./mapFallback";
 import { drawRuler, type Ruler } from "./ruler";
 import {
@@ -588,6 +589,71 @@ function drawCaps(ctx: CanvasRenderingContext2D, snap: Snapshot,
       ctx.restore();
     }
   }
+}
+
+// Players on each objective, per team: a small team-coloured chip with the
+// count under the objective's name, one per side that has anyone there (so a
+// cap only one team stands on shows one chip, and the team view shows only its
+// own). Drawn after the players so a crowd on the flag cannot bury it. The
+// count is the one capOccupancy takes: the zone's static shape, living
+// players, not downed.
+function drawCapCounts(ctx: CanvasRenderingContext2D, snap: Snapshot,
+                       view: ViewState, cs: CanvasSize) {
+  const players = snap.players ?? [];
+  if (!players.length) return;
+  const badgeH = 26 * cs.dpr;
+  const nameFont = Math.max(11, Math.round(11 * cs.dpr));
+  const spots: { x: number; y: number; t1: number; t2: number }[] = [];
+  const zones = snap.captureZones ?? [];
+  if (zones.length) {
+    for (const cz of visibleCaps(zones)) {
+      const anchor = cz.staticPosition ?? cz.position;
+      if (!anchor || !cz.geometry?.length) continue;
+      const { t1, t2 } = capOccupancy(players, anchor, cz.geometry);
+      if (!t1 && !t2) continue;
+      const [x, y] = worldToScreen(view, cs, anchor.x, anchor.y);
+      // under the badge, and under the name when there is one (drawCaps)
+      const top = y + badgeH / 2 + 3 * cs.dpr + (capLabel(cz) ? nameFont + 4 * cs.dpr : 0);
+      spots.push({ x, y: top, t1, t2 });
+    }
+  } else {
+    // RAAS drawn from the lane graph (drawLaneNodeCaps): same shapes, same rule.
+    for (const o of snap.gameState?.lane?.staticObjectives ?? []) {
+      if (!o.position || !o.geometry?.length) continue;
+      const { t1, t2 } = capOccupancy(players, o.position, o.geometry);
+      if (!t1 && !t2) continue;
+      const [x, y] = worldToScreen(view, cs, o.position.x, o.position.y);
+      spots.push({ x, y: y + 13 * cs.dpr + 3 * cs.dpr + nameFont + 4 * cs.dpr, t1, t2 });
+    }
+  }
+  if (!spots.length) return;
+
+  const f = Math.max(10, Math.round(10 * cs.dpr));
+  const h = f + 5 * cs.dpr;
+  const gap = 3 * cs.dpr;
+  ctx.save();
+  ctx.font = `bold ${f}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const s of spots) {
+    const chips = ([[1, s.t1], [2, s.t2]] as const).filter(([, n]) => n > 0);
+    const widths = chips.map(([, n]) =>
+      Math.max(h, ctx.measureText(String(n)).width + 8 * cs.dpr));
+    let x = s.x - (widths.reduce((a, b) => a + b, 0) + gap * (chips.length - 1)) / 2;
+    chips.forEach(([team, n], i) => {
+      const w = widths[i]!;
+      roundRectPath(ctx, x, s.y, w, h, h / 2);
+      ctx.fillStyle = teamColor(team);
+      ctx.fill();
+      ctx.lineWidth = 1 * cs.dpr;
+      ctx.strokeStyle = "rgba(0,0,0,0.55)";
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(n), x + w / 2, s.y + h / 2 + 0.5 * cs.dpr);
+      x += w + gap;
+    });
+  }
+  ctx.restore();
 }
 
 // Helper: roundRect path on canvas (Edge < 99 doesn't ship Path.roundRect,
@@ -1907,6 +1973,7 @@ export interface LayerVisibility {
   rallies?: boolean;
   slNumbers?: boolean;
   squadNumbers?: boolean;
+  capCounts?: boolean;
 }
 
 export function renderScene(ctx: CanvasRenderingContext2D, snap: Snapshot,
@@ -1939,6 +2006,7 @@ export function renderScene(ctx: CanvasRenderingContext2D, snap: Snapshot,
   if (on("markers")) drawMarkers(ctx, snap, view, cs);
   if (on("rallies")) drawRallyPoints(ctx, snap, view, cs, rallies ?? null);
   if (on("players")) drawPlayers(ctx, snap, view, cs, showSLNumbers, showAllNumbers, follow ?? null);
+  if (on("capCounts")) drawCapCounts(ctx, snap, view, cs);
   if (on("rallies") && rallies) drawRallyIntruders(ctx, snap, view, cs, rallies);
   if (on("projectiles")) drawProjectiles(ctx, snap, view, cs);
   // Last, and never gated by a layer toggle: a measurement is something the

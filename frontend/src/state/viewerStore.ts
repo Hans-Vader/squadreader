@@ -56,7 +56,7 @@ const SNAP_BUFFER_CAP = 48;  // memory ceiling (~10 s @ 4 Hz = 40 frames, + marg
 export type LayerKey =
   | "players" | "vehicles" | "deployables" | "markers"
   | "projectiles" | "spawners" | "rallies"
-  | "slNumbers" | "squadNumbers";
+  | "slNumbers" | "squadNumbers" | "capCounts";
 
 // Generic click-selection for every map entity that gets the shared InfoPanel
 // (everything EXCEPT player/vehicle, which keep their dedicated panels + follow).
@@ -72,7 +72,7 @@ export const LAYER_ORDER: LayerKey[] = [
 ];
 
 // Number-label options — shown as their own group in the settings menu.
-export const NUMBER_ORDER: LayerKey[] = ["slNumbers", "squadNumbers"];
+export const NUMBER_ORDER: LayerKey[] = ["slNumbers", "squadNumbers", "capCounts"];
 
 export const LAYER_LABELS: Record<LayerKey, string> = {
   players: "Players",
@@ -84,12 +84,13 @@ export const LAYER_LABELS: Record<LayerKey, string> = {
   rallies: "Rallies",
   slNumbers: "Squad leader numbers",
   squadNumbers: "All player & vehicle numbers",
+  capCounts: "Players on objectives",
 };
 
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   players: true, vehicles: true, deployables: true, markers: true,
   projectiles: true, spawners: false, rallies: true,
-  slNumbers: true, squadNumbers: false,
+  slNumbers: true, squadNumbers: false, capCounts: true,
 };
 
 const LAYERS_LS_KEY = "sqr.mapLayers";

@@ -86,7 +86,7 @@ function body(hit: Hit, snap: Snapshot | null) {
     }
     case "marker": {
       const e = hit.hit.e;
-      const placer = findPlacer(e, snap?.players ?? []);
+      const placer = findPlacer(e, snap?.players ?? [], snap?.squads ?? []);
       const role = ftLabel(e.fireTeamId);
       return <>
         {dot(e.team)}<b>{markerLabel(e.type)}</b>

@@ -74,7 +74,8 @@ function posRow(pos: Vec3 | null | undefined) {
 
 function MarkerBody({ e }: { e: Marker }) {
   const players = useViewerStore((s) => s.curSnap?.players ?? []);
-  const placer = findPlacer(e, players);
+  const squads = useViewerStore((s) => s.curSnap?.squads ?? []);
+  const placer = findPlacer(e, players, squads);
   return (
     <>
       <Row label="TEAM">{e.team ?? "—"}</Row>

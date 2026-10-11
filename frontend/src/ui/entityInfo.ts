@@ -1,7 +1,7 @@
 // Shared, pure formatting helpers for map-entity info — used by both the
 // hover Tooltip and the click InfoPanel so the two never drift apart.
 
-import type { Marker, Player } from "../state/types";
+import type { Marker, Player, SquadState } from "../state/types";
 
 // Friendly label for a marker's BP asset name. Examples:
 //   "BP_MapMarker_Action_MoveSL"          → "Move (SL)"
@@ -54,14 +54,27 @@ export function markerLabel(type: string | null | undefined): string {
 //   fireTeamId === -1 → that squad's Squad Leader
 //   fireTeamId ===  1 → Bravo fireteam leader
 //   fireTeamId ===  2 → Charlie fireteam leader
-// A player is the SL when their stats encode (fireTeamIndex == 0 &&
-// fireTeamPosition == 0); an FTL is (fireTeamIndex > 0 && pos == 0).
+// The SL is whoever the squad itself names as leader (its LeaderState is that
+// player's PlayerState). Failing that — and for fireteam leaders — a player's
+// stats encode it: SL is (fireTeamIndex == 0 && fireTeamPosition == 0), an
+// FTL is (fireTeamIndex > 0 && pos == 0).
 // Falls back to null when we can't resolve (player off-server, etc.).
-export function findPlacer(m: Marker, players: Player[]): Player | null {
+//
+// The leader pointer comes first because it does not depend on a stats field
+// name: a Squad update renamed FireTeamIndex to FireteamIndex (10-2026), the
+// reader stopped finding it, and every SL marker read "offline / unresolved" —
+// in every recording made since, which the leader pointer still resolves.
+export function findPlacer(m: Marker, players: Player[],
+                           squads: SquadState[] = []): Player | null {
   const team = m.team;
   const squad = m.squad;
   const ft = m.fireTeamId;
   if (team == null || squad == null) return null;
+  if (ft === -1 || ft == null) {
+    const lead = squads.find((s) => s.teamId === team && s.id === squad)?.leaderStateAddr;
+    const byLead = lead ? players.find((p) => p._addr === lead) : undefined;
+    if (byLead) return byLead;
+  }
   const inSquad = players.filter(
     (p) => p.teamId === team && p.squadId === squad
   );

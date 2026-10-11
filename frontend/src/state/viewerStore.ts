@@ -392,7 +392,8 @@ export const useViewerStore = create<Store>((set) => ({
   killFeed: [],
   replayKillTimeline: [],
   rallyRecords: [],
-  killFeedVisible: true,
+  // Open, except on a phone, where an open feed covers most of the map.
+  killFeedVisible: typeof window === "undefined" || window.innerWidth > 560,
   killFeedIncaps: loadKillFeedIncaps(),
   scoreboardVisible: false,
   timelineVisible: false,

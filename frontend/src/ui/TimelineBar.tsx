@@ -200,11 +200,14 @@ const SkipIcon = ({ dir, n }: { dir: -1 | 1; n: number }) => (
           letterSpacing="-0.3">{n}</text>
   </Svg>
 );
+/** One frame back or forward: a film frame with a small arrow beside it. A
+ *  bar-and-triangle read as "jump to the start / end" of the match. */
 const StepIcon = ({ dir }: { dir: -1 | 1 }) => (
   <Svg>
     <g transform={dir > 0 ? "translate(24 0) scale(-1 1)" : undefined}>
-      <rect x="6" y="6.5" width="2.2" height="11" rx="0.8" />
-      <path d="M18 6.5v11L9.8 12z" />
+      <rect x="10.5" y="6" width="9" height="12" rx="1.6" fill="none"
+            stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.2 8.6v6.8L3.6 12z" />
     </g>
   </Svg>
 );
@@ -280,6 +283,22 @@ export function TimelineBar() {
   // One open thing at a time: the list of a crowded spot, or the speed menu.
   const [menu, setMenu] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+
+  // The bar's height, published on the stage as --tl-h: wherever the kill
+  // feed would reach down into the bar (any screen narrower than both side by
+  // side), it stands on top of it instead. The bar changes height with its
+  // view, so it is measured, not assumed.
+  const barObs = useRef<ResizeObserver | null>(null);
+  const barRef = useCallback((el: HTMLDivElement | null) => {
+    barObs.current?.disconnect();
+    barObs.current = null;
+    const stage = document.getElementById("stage");
+    if (!el) { stage?.style.removeProperty("--tl-h"); return; }
+    const ro = new ResizeObserver(() =>
+      stage?.style.setProperty("--tl-h", `${Math.ceil(el.offsetHeight)}px`));
+    ro.observe(el);
+    barObs.current = ro;
+  }, []);
   useEffect(() => {
     if (!menu) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(null); };
@@ -608,7 +627,7 @@ export function TimelineBar() {
                   : playing ? "Pause (Space)" : "Play (Space)";
 
   return (
-    <div id="timeline-bar" className={`tb-view-${view}`}>
+    <div id="timeline-bar" className={`tb-view-${view}`} ref={barRef}>
       {body}
 
       <div className="tb-controls">

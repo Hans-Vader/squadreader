@@ -193,11 +193,18 @@ export function KillFeed() {
 
   return (
     <div id="killfeed" className={visible ? "kf-open" : "kf-collapsed"}>
-      <header onClick={toggle} title="Show / hide">
-        <span>Kills</span>
+      <header onClick={toggle} title={visible ? "Hide the kill feed" : "Show the kill feed"}>
+        <span>Kill feed</span>
         <span className="kf-count">{entries.length}</span>
-        <button className="kf-clear" onClick={(e) => { e.stopPropagation(); clear(); }}
-                title="Clear">⨯</button>
+        {visible && entries.length > 0 && (
+          <button className="kf-clear" onClick={(e) => { e.stopPropagation(); clear(); }}
+                  title="Clear the rows shown so far">Clear</button>
+        )}
+        <svg className={"kf-caret" + (visible ? " open" : "")} viewBox="0 0 24 24"
+             width="12" height="12" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2.2"
+                strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </header>
       {visible && (
         <div className="kf-body">

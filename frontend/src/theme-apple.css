@@ -15,12 +15,16 @@
   --ink:       #f5f5f7;
   --ink-mute:  #a1a1a6;
   --ink-faint: #6e6e73;
-  --on-accent: #06070a;
-  /* accent — Apple blue */
-  --accent:      #2997ff;
-  --accent-2:    #64d2ff;
-  --accent-weak: rgba(41,151,255,0.14);
-  --accent-ring: rgba(41,151,255,0.40);
+  --on-accent: #0b0b0d;
+  /* accent — white, not blue. The map draws team 2 in blue (#5aa0e0), and
+     the blue accent on the play button, the scrub fill and the playhead read
+     as one more team-2 line in the ticket race. A player's own controls in
+     white (as in most video players) can never be taken for a side. The
+     rest of squadreader.com keeps its blue; this page is the one with teams. */
+  --accent:      #f5f5f7;
+  --accent-2:    #ffffff;
+  --accent-weak: rgba(255,255,255,0.08);
+  --accent-ring: rgba(255,255,255,0.32);
   /* status (Apple-tuned) */
   --good: #30d158;
   --warn: #ffd426;

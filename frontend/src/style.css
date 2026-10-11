@@ -97,6 +97,7 @@ html, body, #root {
   box-shadow: var(--shadow-sm);
 }
 #hud b { color: var(--accent); }
+#hud .hud-match { color: var(--ink-mute); }
 /* Data age. Silent while healthy; loud once the feed has actually stopped. */
 #hud .age { font-variant-numeric: tabular-nums; }
 #hud .age.warn { color: var(--warn); font-weight: 700; }
@@ -349,10 +350,11 @@ html, body, #root {
 #vehicle-panel,
 #player-panel {
   position: absolute;
-  top: 60px;
+  /* clear of the server box above it (8px + two lines) */
+  top: 72px;
   left: 12px;
   width: 360px;
-  max-height: calc(100% - 80px);
+  max-height: calc(100% - 92px);
   overflow-y: auto;
   background: var(--glass-2);
   -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
@@ -989,12 +991,11 @@ html, body, #root {
 #killfeed > header {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 10px;
-  background: rgba(31,38,48,0.5);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-mute);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
   cursor: pointer;
   user-select: none;
 }
@@ -1010,14 +1011,17 @@ html, body, #root {
 }
 #killfeed > header .kf-clear {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--ink-mute);
-  font-size: 14px;
+  font: inherit; font-size: 11px; font-weight: 500;
   cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
+  padding: 1px 6px;
 }
-#killfeed > header .kf-clear:hover { color: var(--bad); }
+#killfeed > header .kf-clear:hover { color: var(--ink); border-color: var(--border-strong); }
+#killfeed > header .kf-clear:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+#killfeed > header .kf-caret { color: var(--ink-mute); transform: rotate(-90deg); transition: transform 0.15s; }
+#killfeed > header .kf-caret.open { transform: none; }
 #killfeed .kf-body {
   overflow-y: auto;
   padding: 4px 6px;
@@ -2109,6 +2113,8 @@ html, body, #root {
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
 }
+#team-bar .tb-players { display: inline-flex; align-items: center; gap: 3px; }
+#team-bar .tb-kd i { font-style: normal; color: var(--ink-faint); margin-right: 1px; }
 #team-bar .tb-centre {
   display: flex;
   flex-direction: column;
@@ -2133,14 +2139,12 @@ html, body, #root {
   display: flex; align-items: center; gap: 7px;
   font-size: 15px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 #team-bar .tb-state {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--ink-mute);
   background: var(--surface-2);
   border-radius: var(--radius-chip);
@@ -2433,9 +2437,9 @@ html, body, #root {
   flex: none;
   background: var(--surface-2); color: var(--ink-mute);
   border: 1px solid var(--glass-brd); border-radius: var(--radius-chip);
-  padding: 5px 12px; font-size: 10.5px; font-weight: 700;
-  letter-spacing: 0.05em; cursor: pointer;
-  transition: all 0.12s;
+  padding: 5px 12px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .pp .pp-follow:hover { color: var(--ink); border-color: var(--accent); }
 .pp .pp-follow.on {
@@ -2525,40 +2529,72 @@ html, body, #root {
 .pp .pp-mag.empty { opacity: 0.5; }
 .pp .pp-mag.empty .pp-mag-fill { background: transparent; }
 
-/* stat chips */
+/* match stats: a number over its name, five to a row */
 .pp .pp-stats {
-  display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px; margin-top: 14px;
+  background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 .pp .pp-stat {
-  display: flex; align-items: center; gap: 5px;
-  background: var(--surface-2);
-  border: 1px solid var(--glass-brd); border-radius: var(--radius-sm);
-  padding: 4px 9px 4px 7px; flex: 1; min-width: 0; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: var(--surface-1);
+  padding: 7px 2px 6px; min-width: 0;
 }
-.pp .pp-stat-g { font-size: 12px; line-height: 1; }
 .pp .pp-stat-v {
-  font-size: 13px; font-weight: 700; color: var(--ink);
+  font-size: 14px; font-weight: 650; color: var(--ink); line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
+.pp .pp-stat-k {
+  font-size: 10px; color: var(--ink-mute);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp .pp-stat.bad .pp-stat-v { color: var(--bad); }
+.pp .pp-stat.strong { background: var(--surface-2); }
+.pp .pp-stat.strong .pp-stat-v { font-weight: 750; }
 
-.pp .pp-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-top: 15px; padding-top: 11px;
-  border-top: 1px solid var(--border);
-}
-.pp .pp-score {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--ink-mute);
-  background: var(--surface-2);
-  border: 1px solid var(--glass-brd); border-radius: var(--radius-chip);
-  padding: 4px 12px;
-}
-.pp .pp-score b { color: var(--accent); font-size: 13px; margin-left: 4px; }
-.pp .pp-pos {
-  font-size: 10.5px; color: var(--ink-mute);
-  font-variant-numeric: tabular-nums; opacity: 0.7;
-}
 
+/* ===== The bottom of the stage, by screen width ====================== */
+/* The timeline bar (centred, up to 780px) and the kill feed (380px, bottom
+   right) only fit side by side from about 1580px. Below that they used to
+   overlap: on a 1366 laptop the bar covered the feed's lower rows. The bar
+   publishes its height as --tl-h (TimelineBar), so each width gets a layout
+   where nothing covers anything:
+     1001-1579  the bar runs from the left edge to the feed, the feed keeps
+                the full right column;
+      561-1000  the bar spans the width, the feed stands on top of it;
+        <=560   a phone: the same, with the feed shut by default. */
+/* The top row (server line, match strip, controls) needs ~1450px. Narrower,
+   the controls ran in under the strip and hid "← Back"; the in-page list of
+   past matches is the one they can spare, Back still leads to the site's. */
+@media (max-width: 1440px) {
+  #controls .tb-past { display: none; }
+}
+@media (max-width: 1579px) and (min-width: 1001px) {
+  #timeline-bar {
+    left: 12px; right: calc(380px + 24px);
+    width: auto; transform: none;
+  }
+  /* the detail panels share the left column with the bar's left end */
+  .detail-panel, #vehicle-panel, #player-panel {
+    max-height: calc(100% - 72px - var(--tl-h, 0px) - 22px);
+  }
+}
+@media (max-width: 1000px) {
+  #timeline-bar {
+    left: 12px; right: 12px;
+    width: auto; transform: none;
+  }
+  #killfeed {
+    bottom: calc(var(--tl-h, 0px) + 18px);
+    width: 340px;
+    max-height: min(42vh, calc(100% - var(--tl-h, 0px) - 124px));
+  }
+  .detail-panel, #vehicle-panel, #player-panel {
+    max-height: calc(100% - 72px - var(--tl-h, 0px) - 22px);
+  }
+}
 
 /* ===== Narrow screens (phones / small tablets) ====================== */
 /* The map itself is fully usable via touch (one-finger pan, two-finger pinch,
@@ -2566,18 +2602,43 @@ html, body, #root {
 @media (max-width: 560px) {
   /* Detail panels are 360px fixed — cap them to the viewport and let them span
      the bottom rather than hang off the right edge. */
+  /* A bottom sheet over the map, between the top rows and the timeline. */
   .detail-panel, #vehicle-panel, #player-panel {
     width: auto;
     left: 8px; right: 8px;
-    max-height: 55%;
+    top: auto; bottom: calc(var(--tl-h, 0px) + 14px);
+    max-height: calc(100% - var(--tl-h, 0px) - 172px);
   }
-  /* HUD + controls: allow the control row to wrap instead of clipping. */
-  #controls { flex-wrap: wrap; max-width: calc(100vw - 16px); justify-content: flex-end; }
-  #hud { max-width: calc(100vw - 16px); }
-  /* Player search shrinks to fit. */
-  .player-search { width: min(270px, calc(100vw - 16px)); }
-  /* Kill feed narrower so it doesn't cover half the map. */
-  #killfeed { max-width: 62vw; }
+  /* Top of a phone, three rows that never overlap: the match strip across
+     the width, the controls in one scrollable row under it, then the search.
+     The server line goes — the strip already says which match this is. */
+  #hud { display: none; }
+  #team-bar {
+    left: 8px; right: 8px; transform: none;
+    min-width: 0; max-width: none;
+    padding: 6px 8px;
+  }
+  #team-bar .tb-team { min-width: 0; padding: 0 2px; }
+  #team-bar .tb-tickets { font-size: 18px; }
+  #team-bar .tb-centre { min-width: 0; flex: 1; padding: 0 8px; }
+  #team-bar .tb-map { max-width: 100%; font-size: 11px; }
+  #team-bar .tb-ticketbar { width: 100%; }
+  #team-bar .tb-kd i { display: none; }
+  /* No scrolling row: it would clip the settings menu that drops out of it.
+     "Past matches" and the clip recorder stay on bigger screens. */
+  #controls {
+    top: 76px; left: 8px; right: 8px;
+    flex-wrap: wrap; justify-content: flex-start;
+  }
+  #controls .tb-past, #controls .clip-rec { display: none; }
+  .player-search { top: 120px; left: 8px; right: 8px; width: auto; }
+  /* the bar and the feed span the width, the feed on top of the bar */
+  #timeline-bar { left: 8px; right: 8px; bottom: 8px; }
+  #killfeed {
+    left: 8px; right: 8px; width: auto;
+    bottom: calc(var(--tl-h, 0px) + 14px);
+    max-height: min(36vh, calc(100% - var(--tl-h, 0px) - 180px));
+  }
   /* Recording picker already uses min(920px, 94vw); tighten row padding a touch. */
   #recording-picker .rp-row td { padding: 9px 10px; }
 }

@@ -643,11 +643,21 @@ export interface HeatmapLayerOption {
   layer_name: string;
   map_name: string | null;
   matches: number;
-  deaths: number;
+  /** Death heatmap layers carry `deaths`, placement layers `placements`. */
+  deaths?: number;
+  placements?: number;
 }
 
-/** cell_x/cell_y are the cell's lower-left corner, in world centimetres. */
-export interface HeatmapCell { cell_x: number; cell_y: number; n: number; }
+/** What the layer heatmap counts: deaths, or where FOB radios / built HABs
+ *  were put down (read by central out of each replay). */
+export type HeatmapKind = "deaths" | "fob" | "hab" | "fobhab";
+
+/** cell_x/cell_y are the cell's lower-left corner, in world centimetres.
+ *  Placement cells also split `n` into `fobs` and `habs`. */
+export interface HeatmapCell {
+  cell_x: number; cell_y: number; n: number;
+  fobs?: number; habs?: number;
+}
 export interface LayerHeatmap {
   layerName: string;
   period: string;
@@ -655,6 +665,10 @@ export interface LayerHeatmap {
   maxCount: number;
   cells: HeatmapCell[];
   bounds: LayerBounds | null;
+  /** Placement heatmaps only. `matches` = replays read on this layer. */
+  kind?: Exclude<HeatmapKind, "deaths">;
+  matches?: number;
+  total?: number;
 }
 export interface PlayerMatchRow {
   match_id: string;

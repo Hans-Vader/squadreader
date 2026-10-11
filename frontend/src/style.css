@@ -2822,7 +2822,8 @@ html, body, #root {
 
 /* ---- heatmap ---- */
 #player-stats .hm-tab { padding: 8px 16px 16px; }
-#player-stats .hm-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+#player-stats .hm-controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+#player-stats .hm-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 #player-stats .hm-controls .ps-period { margin-left: 0; }
 #player-stats .hm-wrap { position: relative; }
 #player-stats .hm-canvas {

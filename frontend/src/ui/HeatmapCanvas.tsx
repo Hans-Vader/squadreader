@@ -1,5 +1,6 @@
-// Kill/death heatmap over the layer's minimap texture. Two modes:
-//   • "layer" — server-aggregated death-density grid across every match
+// Heatmap over the layer's minimap texture. Two modes:
+//   • "layer" — server-aggregated density grid across every match: deaths, or
+//     (central only) where FOB radios and HABs were put down
 //   • "match" — one match's individual kill points, coloured by team
 //
 // Colour decisions (validated, not eyeballed):
@@ -69,7 +70,9 @@ function extentOf(b: LayerBounds | null): Extent | null {
 }
 
 export type HeatmapData =
-  | { kind: "layer"; cells: HeatmapCell[]; cellCm: number; maxCount: number }
+  | { kind: "layer"; cells: HeatmapCell[]; cellCm: number; maxCount: number;
+      /** What a cell counts, for the hover: "deaths" (default) or "placements". */
+      unit?: "deaths" | "placements" }
   | { kind: "match"; points: HeatmapPoint[] };
 
 export function HeatmapCanvas({ bounds: given, name, data }: {
@@ -174,7 +177,7 @@ export function HeatmapCanvas({ bounds: given, name, data }: {
     const hit = data.cells.find(
       (c) => wx >= c.cell_x && wx < c.cell_x + data.cellCm
           && wy >= c.cell_y && wy < c.cell_y + data.cellCm);
-    setHover(hit ? `${hit.n} deaths` : null);
+    setHover(hit ? cellLabel(hit, data.unit ?? "deaths") : null);
   }, [data, extent]);
 
   // No bounds means we do not know where this layer sits in the world. Say so —
@@ -197,6 +200,18 @@ export function HeatmapCanvas({ bounds: given, name, data }: {
         : <TeamLegend />}
     </div>
   );
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function cellLabel(c: HeatmapCell, unit: "deaths" | "placements"): string {
+  if (unit === "deaths") return plural(c.n, "death", "deaths");
+  const parts: string[] = [];
+  if (c.fobs) parts.push(plural(c.fobs, "FOB radio", "FOB radios"));
+  if (c.habs) parts.push(plural(c.habs, "HAB", "HABs"));
+  return parts.length ? parts.join(" · ") : plural(c.n, "placement", "placements");
 }
 
 function DensityLegend({ max }: { max: number }) {

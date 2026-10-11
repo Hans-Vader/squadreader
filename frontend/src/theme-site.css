@@ -231,6 +231,11 @@
 }
 :root[data-site="1"] #player-stats .ps-server { margin-left: 0; }
 :root[data-site="1"] #player-stats .hm-controls .ps-period { margin-left: 0; }
+/* the heatmap's Deaths / FOB / HAB switch: the same pill track as the tabs */
+:root[data-site="1"] #player-stats .hm-kinds {
+  display: inline-flex; flex-wrap: wrap; gap: 3px; margin-bottom: 12px;
+  background: var(--surface-2); border-radius: var(--radius-chip); padding: 4px;
+}
 
 /* --- tables: homepage card + spacing --- */
 :root[data-site="1"] #player-stats .ps-table {

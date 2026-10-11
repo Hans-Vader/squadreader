@@ -17,7 +17,7 @@ import { fmtInt } from "../format";
 import type {
   LeaderRow, PlayerProfile, PlayerSummary, WeaponStat, NemesisRow,
   PlayerMatchRow, StatsPeriod, WeaponMetaRow, LayerHeatmap, EloBadge,
-  HeatmapLayerOption, SquadmateRow, VehicleUsedRow, MapRecord, FactionRecord,
+  HeatmapLayerOption, HeatmapKind, SquadmateRow, VehicleUsedRow, MapRecord, FactionRecord,
   ActivityCell, MatchSummaryRow, MatchDetail, MatchDetailPlayer, MatchHeatmap,
   ServerOption,
 } from "../state/types";
@@ -94,6 +94,25 @@ const LEADER_TABS = new Set([
   "vehicle_kills", "matches",
 ]);
 const PERIODLESS = new Set(["elo"]);
+
+/** What the heatmap can count. Placements exist only on central, which reads
+ *  them out of each stored replay; the agent's own stats API has deaths only. */
+const HEAT_KINDS: { key: HeatmapKind; label: string }[] = [
+  { key: "deaths", label: "Deaths" },
+  { key: "fob", label: "FOB radios" },
+  { key: "hab", label: "HABs" },
+  { key: "fobhab", label: "FOB + HAB" },
+];
+/** Placement cells are coarser than death cells: a layer sees a few dozen
+ *  radios, not thousands of deaths, and at 50 m they never pile up. */
+const PLACEMENT_CELL_CM = 10000;
+const DEATH_CELL_CM = 5000;
+
+function initialHeatKind(inline: boolean): HeatmapKind {
+  if (!inline || !IS_CENTRAL) return "deaths";
+  const k = new URLSearchParams(window.location.search).get("heat");
+  return HEAT_KINDS.some((x) => x.key === k) ? (k as HeatmapKind) : "deaths";
+}
 
 /** The player a /stats link was opened for: `?player=<eos>`, or the older
  *  `#/players/<eos>` the server page linked with — which nothing ever read, so
@@ -175,6 +194,11 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
   const [weapons, setWeapons] = useState<WeaponMetaRow[] | null>(null);
   const [heat, setHeat] = useState<LayerHeatmap | null>(null);
   const [layer, setLayer] = useState("");
+  const [heatKind, setHeatKind] = useState<HeatmapKind>(() => initialHeatKind(inline));
+  const heatKindRef = useRef(heatKind); heatKindRef.current = heatKind;
+  // Switching kind or layer can put two heatmap requests in flight; only the
+  // newest one may land.
+  const heatSeq = useRef(0);
   const [ldLoading, setLdLoading] = useState(false);
   const [q, setQ] = useState(() =>
     inline ? new URLSearchParams(window.location.search).get("q") || "" : "");
@@ -195,8 +219,13 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
     if (t === "weapons") {
       fetchWeaponMeta(p, 40, sv).then(setWeapons).catch(fail).finally(done);
     } else if (t === "heatmap") {
+      const seq = ++heatSeq.current;
       if (!lyr) { setHeat(null); done(); return; }
-      fetchLayerHeatmap(lyr, p, 5000, sv).then(setHeat).catch(fail).finally(done);
+      const hk = heatKindRef.current;
+      fetchLayerHeatmap(lyr, p, hk === "deaths" ? DEATH_CELL_CM : PLACEMENT_CELL_CM,
+                        sv, hk)
+        .then((h) => { if (seq === heatSeq.current) setHeat(h); })
+        .catch(fail).finally(done);
     } else if (t === "matchlist") {
       fetchMatches(p, 60, sv).then(setMatches).catch(fail).finally(done);
     } else {
@@ -255,6 +284,13 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
   const pickLayer = (l: string) => {
     setLayer(l);
     loadTab("heatmap", period, l, server);
+  };
+  // The tab re-fetches its layer list for the new kind and picks the layer to
+  // draw (the same one when it has data of this kind), which loads the map.
+  const pickHeatKind = (k: HeatmapKind) => {
+    heatKindRef.current = k;
+    setHeatKind(k);
+    setHeat(null);
   };
   const pickServer = (sv: string) => {
     setServer(sv);
@@ -394,6 +430,7 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
 
             {!ldLoading && tab === "heatmap" && (
               <HeatmapTab layer={layer} onPickLayer={pickLayer} heat={heat}
+                          kind={heatKind} onPickKind={pickHeatKind}
                           server={server} />
             )}
           </>
@@ -635,65 +672,115 @@ function MatchTeamTable({ team, faction, winner, rows, onPick }: {
   );
 }
 
-function HeatmapTab({ layer, onPickLayer, heat, server }: {
+function HeatmapTab({ layer, onPickLayer, heat, server, kind, onPickKind }: {
   layer: string;
   onPickLayer: (l: string) => void;
   heat: LayerHeatmap | null;
   server: string;
+  kind: HeatmapKind;
+  onPickKind: (k: HeatmapKind) => void;
 }) {
   const [opts, setOpts] = useState<HeatmapLayerOption[] | null>(null);
   const [optErr, setOptErr] = useState<string | null>(null);
+  const lastKind = useRef(kind);
+  const placements = kind !== "deaths";
 
-  // The picker only offers layers that have at least one positioned kill (on the
-  // selected server), so a pick can never land on an empty map. Re-fetches when
-  // the server scope changes.
+  // The picker only offers layers that have something of this kind to draw (on
+  // the selected server), so a pick can never land on an empty map. Re-fetches
+  // when the server scope or the kind changes.
   useEffect(() => {
     let live = true;
-    fetchHeatmapLayers(server)
+    const kindChanged = lastKind.current !== kind;
+    lastKind.current = kind;
+    if (kindChanged) setOpts(null);
+    setOptErr(null);
+    fetchHeatmapLayers(server, kind)
       .then((o) => {
         if (!live) return;
         setOpts(o);
         // auto-pick when nothing is selected OR the current layer isn't offered
         // on this server, so the dropdown + heatmap stay in sync across scopes.
-        if (o.length > 0 && !o.some((x) => x.layer_name === layer))
-          onPickLayer(o[0].layer_name);
+        // A new kind always loads: the layer stays when it has data of this
+        // kind too, so deaths and FOBs on one map are one click apart.
+        const offered = o.some((x) => x.layer_name === layer);
+        if (o.length > 0 && (!offered || kindChanged))
+          onPickLayer(offered ? layer : o[0].layer_name);
       })
       .catch((e) => { if (live) setOptErr(String(e)); });
     return () => { live = false; };
-    // Re-runs on server change; layer changes are ignored (would fight auto-pick).
+    // Re-runs on server/kind change; layer changes are ignored (would fight auto-pick).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [server]);
+  }, [server, kind]);
 
-  if (optErr) return <div className="ps-msg ps-err">Error: {optErr}</div>;
-  if (opts === null) {
-    return <div className="ps-msg"><span className="ps-spin" />Loading layers…</div>;
-  }
-  if (opts.length === 0) {
-    return (
+  const kinds = IS_CENTRAL && (
+    <div className="hm-kinds" role="group" aria-label="What the heatmap counts">
+      {HEAT_KINDS.map((k) => (
+        <button key={k.key} aria-pressed={k.key === kind}
+                className={k.key === kind ? "ps-tab active" : "ps-tab"}
+                onClick={() => { if (k.key !== kind) onPickKind(k.key); }}>
+          {k.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  let body: React.ReactNode;
+  if (optErr) {
+    body = <div className="ps-msg ps-err">Error: {optErr}</div>;
+  } else if (opts === null) {
+    body = <div className="ps-msg"><span className="ps-spin" />Loading layers…</div>;
+  } else if (opts.length === 0) {
+    body = (
       <div className="ps-msg">
-        No positioned kill data yet. Positions are only recorded for matches
-        processed after this version.
+        {placements
+          ? "No FOB radio or HAB placements read yet. They come from each "
+            + "match's replay, so only matches with a stored replay count."
+          : "No positioned kill data yet. Positions are only recorded for "
+            + "matches processed after this version."}
       </div>
+    );
+  } else {
+    body = (
+      <>
+        <div className="hm-controls">
+          <select className="ps-period" value={layer}
+                  onChange={(e) => onPickLayer(e.target.value)}>
+            {opts.map((o) => (
+              <option key={o.layer_name} value={o.layer_name}>
+                {o.layer_name} ({placements
+                  ? `${o.placements ?? 0} placed`
+                  : `${o.deaths ?? 0} deaths`} / {o.matches} matches)
+              </option>
+            ))}
+          </select>
+        </div>
+        {heat && heat.cells.length > 0
+          ? <HeatmapCanvas bounds={heat.bounds} name={heat.layerName}
+                           data={{ kind: "layer", cells: heat.cells,
+                                   cellCm: heat.cellCm, maxCount: heat.maxCount,
+                                   unit: placements ? "placements" : "deaths" }} />
+          : <div className="ps-msg">
+              {placements
+                ? "Nothing of this kind placed on this layer in this period."
+                : "No death records on this layer for this period."}
+            </div>}
+        {placements && heat && heat.cells.length > 0 && (
+          <div className="ps-note">
+            {fmtInt(heat.total ?? 0)} placed, from the replays of{" "}
+            {fmtInt(heat.matches ?? 0)} {heat.matches === 1 ? "match" : "matches"}{" "}
+            on this layer. Map-spawned
+            radios and HABs are left out, and a HAB counts once it was built.
+            Each square is {Math.round(heat.cellCm / 100)} m across.
+          </div>
+        )}
+      </>
     );
   }
 
   return (
     <div className="hm-tab">
-      <div className="hm-controls">
-        <select className="ps-period" value={layer}
-                onChange={(e) => onPickLayer(e.target.value)}>
-          {opts.map((o) => (
-            <option key={o.layer_name} value={o.layer_name}>
-              {o.layer_name} ({o.deaths} deaths / {o.matches} matches)
-            </option>
-          ))}
-        </select>
-      </div>
-      {heat
-        ? <HeatmapCanvas bounds={heat.bounds} name={heat.layerName}
-                         data={{ kind: "layer", cells: heat.cells,
-                                 cellCm: heat.cellCm, maxCount: heat.maxCount }} />
-        : <div className="ps-msg">No death records on this layer for this period.</div>}
+      {kinds}
+      {body}
     </div>
   );
 }

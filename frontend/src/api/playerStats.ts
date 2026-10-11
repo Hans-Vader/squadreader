@@ -9,7 +9,7 @@
 import type {
   PlayerSummary, PlayerProfile, LeaderRow, StatsPeriod,
   WeaponMetaRow, MatchHeatmap, LayerHeatmap, HeatmapLayerOption,
-  MatchSummaryRow, MatchDetail, ServerOption,
+  MatchSummaryRow, MatchDetail, ServerOption, HeatmapKind,
 } from "../state/types";
 
 async function getJson<T>(url: string): Promise<T> {
@@ -57,9 +57,16 @@ export async function fetchMatchHeatmap(matchId: string): Promise<MatchHeatmap> 
   return getJson(`./api/heatmap?match=${encodeURIComponent(matchId)}`);
 }
 
-/** Only layers that have at least one positioned kill — the rest cannot be drawn. */
-export async function fetchHeatmapLayers(server = ""): Promise<HeatmapLayerOption[]> {
-  return getJson(`./api/layers?x=1${srv(server)}`);
+/** Only layers that have something to draw — a positioned kill, or for a
+ *  placement kind at least one FOB radio / HAB. */
+export async function fetchHeatmapLayers(
+  server = "", kind: HeatmapKind = "deaths",
+): Promise<HeatmapLayerOption[]> {
+  return getJson(`./api/layers?x=1${kindQs(kind)}${srv(server)}`);
+}
+
+function kindQs(kind: HeatmapKind): string {
+  return kind === "deaths" ? "" : `&kind=${kind}`;
 }
 
 export async function fetchMatches(
@@ -74,8 +81,9 @@ export async function fetchMatchDetail(matchId: string): Promise<MatchDetail> {
 
 export async function fetchLayerHeatmap(
   layer: string, period: StatsPeriod = "alltime", cellCm = 5000, server = "",
+  kind: HeatmapKind = "deaths",
 ): Promise<LayerHeatmap> {
   return getJson(
     `./api/heatmap?layer=${encodeURIComponent(layer)}` +
-    `&period=${period}&cell=${cellCm}${srv(server)}`);
+    `&period=${period}&cell=${cellCm}${kindQs(kind)}${srv(server)}`);
 }

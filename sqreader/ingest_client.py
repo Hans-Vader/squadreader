@@ -234,9 +234,14 @@ def _push_replay_parts(creds: dict[str, str], match_id: str, server_id: str,
     keeps them until all are in and joins them only if the result is exactly
     `size` bytes with this sha256. Each part is read, sealed and sent on its
     own, so neither the whole file nor an envelope gone stale is held for the
-    length of the upload; a part that fails is simply sent again next flush."""
+    length of the upload; a part that fails is simply sent again next flush.
+
+    The last part's answer is checked, not assumed: central says whether the
+    replay is now whole, and a "still missing parts" answer must not let the
+    backlog retire a replay central does not have."""
     whole = _file_sha256(path)
     count = (size + _REPLAY_CHUNK_BYTES - 1) // _REPLAY_CHUNK_BYTES
+    raw = b""
     with path.open("rb") as f:
         for index in range(count):
             part = f.read(_REPLAY_CHUNK_BYTES)
@@ -254,7 +259,14 @@ def _push_replay_parts(creds: dict[str, str], match_id: str, server_id: str,
                          "X-Sqr-Manifest": json.dumps(manifest,
                                                       separators=(",", ":")),
                          "User-Agent": _UA})
-            _send(req, timeout=timeout)
+            raw = _send(req, timeout=timeout)
+    try:
+        answer = json.loads(raw or b"{}")
+    except ValueError:
+        answer = {}
+    if isinstance(answer, dict) and answer.get("complete") is False:
+        raise PushError(f"central is still missing {answer.get('missing', '?')} "
+                        f"part(s) of the replay for {match_id}")
 
 
 def push_replay(creds: dict[str, str], match_id: str, server_id: str,

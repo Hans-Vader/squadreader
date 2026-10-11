@@ -110,3 +110,37 @@ def test_a_failed_part_stops_the_upload(tmp_path, monkeypatch):
     else:
         raise AssertionError("a refused part must surface as a PushError")
     assert calls["n"] == 2, "no part is sent after one was refused"
+
+
+def test_a_last_part_central_does_not_call_complete_is_not_success(tmp_path, monkeypatch):
+    """If central answers the final part with "still missing", the backlog
+    must keep the replay, not retire one central does not have."""
+    monkeypatch.setattr(ic, "_REPLAY_CHUNK_THRESHOLD", 10)
+    monkeypatch.setattr(ic, "_REPLAY_CHUNK_BYTES", 10)
+    f = tmp_path / "m.sqrx"
+    f.write_bytes(b"z" * 25)
+
+    class _Answer(_Resp):
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def read(self) -> bytes:
+            return self.body
+
+    answers = [b'{"ok":true,"complete":false,"missing":2}',
+               b'{"ok":true,"complete":false,"missing":1}',
+               b'{"ok":true,"complete":false,"missing":1}']
+    monkeypatch.setattr(ic.urllib.request, "urlopen",
+                        lambda req, timeout=None: _Answer(answers.pop(0)))
+    monkeypatch.setattr(ic, "_push_base", lambda creds: "https://central.test")
+    try:
+        ic.push_replay(CREDS, "M1", "eu1", f, seq=7)
+    except ic.PushError as exc:
+        assert "missing 1" in str(exc)
+    else:
+        raise AssertionError("an incomplete replay must not count as published")
+
+    answers[:] = [b'{"ok":true,"complete":false,"missing":2}',
+                  b'{"ok":true,"complete":false,"missing":1}',
+                  b'{"ok":true,"match_id":"M1","complete":true}']
+    ic.push_replay(CREDS, "M1", "eu1", f, seq=8)   # whole: no error

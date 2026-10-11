@@ -92,6 +92,10 @@ export interface DiffState {
   pending: PendingDeath[];
   // every event that names a victim, briefly, whatever its attacker
   recentEvents: { ev: DamageEvent; atMs: number | null }[];
+  // victim name -> who incapacitated them, while that incap row is the last
+  // word on the player: until they die, or ATTACK_ATTR_TTL_SEC passes
+  // (revived, or they left)
+  openIncaps: Map<string, { attacker: string; bufAt: number | null }>;
 }
 
 export function createDiffState(): DiffState {
@@ -106,6 +110,7 @@ export function createDiffState(): DiffState {
     unattributedKills: 0,
     pending: [],
     recentEvents: [],
+    openIncaps: new Map(),
   };
 }
 
@@ -463,6 +468,49 @@ export function diffSnapshot(
     return undefined;
   };
 
+  // A death ends the victim's open incap. It follows that incap — and only
+  // has to say the player died — when nobody else is credited with it.
+  const closeIncap = (vname: string, killer: string | null): boolean => {
+    const inc = state.openIncaps.get(vname);
+    if (!inc) return false;
+    state.openIncaps.delete(vname);
+    return killer == null || killer === inc.attacker;
+  };
+
+  const emitIncap = (ev: DamageEvent) => {
+    const attacker = ev.attacker as string;
+    const vname = ev.victim as string;
+    const killerPlayer = playerByName.get(attacker) ?? null;
+    const killerVehicle = findPlayerVehicle(snap, attacker);
+    const w = resolveWeapon(attacker, vname, [ev], killerPlayer,
+                            killerVehicle, state.lastKnownWeapon);
+    const victim = playerByName.get(vname) ?? null;
+    const kTeam = teamByName(attacker);
+    const vTeam = victim?.teamId ?? ev.victimTeam ?? null;
+    out.push({
+      id: nextId(),
+      wallClockMs: wallMs,
+      gameTimeSec: gameTime,
+      killer: attacker,
+      killerTeam: kTeam,
+      killerRoleId: killerPlayer?.roleId ?? null,
+      killerVehicleClass: killerVehicle?.classShort ?? null,
+      weaponClass: w.weaponClass,
+      weaponApprox: w.weaponApprox,
+      damageType: w.damageType ?? ev.damageType ?? null,
+      hitDistance: w.hitDistance,
+      headshot: w.headshot,
+      victim: vname,
+      victimTeam: vTeam,
+      victimRoleId: victim?.roleId ?? null,
+      victimVehicleClass: findPlayerVehicle(snap, vname)?.classShort ?? null,
+      tk: kTeam !== null && kTeam === vTeam,
+      suicide: false,
+      wounded: true,
+    });
+    state.openIncaps.set(vname, { attacker, bufAt: gameTime });
+  };
+
   const emitCredited = (p: Player, buf: BufferedAttack, m: DeathMeta) => {
     const vname = p.name as string;
     const ev = buf.ev;
@@ -494,6 +542,7 @@ export function diffSnapshot(
       tk: !suicide && kTeam !== null && kTeam === vTeam,
       suicide,
       wounded: false,
+      afterIncap: closeIncap(vname, suicide ? null : attacker),
     });
   };
 
@@ -521,6 +570,7 @@ export function diffSnapshot(
       tk: false,
       suicide: c.suicide,
       wounded: false,
+      afterIncap: closeIncap(vname, null),
       cause: c.cause,
     });
   };
@@ -560,13 +610,14 @@ export function diffSnapshot(
     return { newEntries: out };
   }
 
-  // --- Wounded (incap) rows: intentionally NOT emitted -----------------
-  // The feed shows one row per KILL, not per incap. Emitting a wounded row
-  // AND a death row double-listed every engagement ("X incap'd Y" at the
-  // incap, then "X killed Y" seconds later when they bled out). We keep only
-  // the death row; the wound is still buffered below so the death that
-  // follows is attributed to whoever put the player down. A wound that never
-  // becomes a death (the victim was revived) correctly shows nothing.
+  // --- Incap rows -----------------------------------------------------
+  // Every incap with an attacker is a row of its own, at the moment it
+  // happens. Shown only at the death, the feed ran a median 14-22 s behind
+  // the fight (over a minute for one death in ten), and the third of incaps
+  // that are revived never showed at all — measured on three full matches.
+  // The death that follows still gets its row, marked afterIncap, so the
+  // viewer can show both or the deaths alone (what this feed showed until
+  // 10-2026) from the one diff.
 
   // --- Buffer this tick's attack events -------------------------------
   // Any wounded/killed event with a real attacker records who put a
@@ -586,6 +637,7 @@ export function diffSnapshot(
     if (state.attackSeen.has(fp)) continue;
     state.attackSeen.add(fp);
     state.attackBuffer.push({ ev, bufAt: gameTime, used: false });
+    if (ev.wounded && !ev.killed) emitIncap(ev);
   }
 
   settlePending(false);
@@ -618,6 +670,12 @@ export function diffSnapshot(
   }
   // Hard cap so a stretch with no gameState can't grow the buffer unbounded.
   state.attackBuffer = keep.length > 400 ? keep.slice(keep.length - 400) : keep;
+  // An incap that outlives the same window was revived (or the player left).
+  if (gameTime != null) {
+    for (const [v, inc] of state.openIncaps)
+      if (inc.bufAt != null && gameTime - inc.bufAt > ATTACK_ATTR_TTL_SEC)
+        state.openIncaps.delete(v);
+  }
 
   // Bound the dedupe set so it can't grow forever in long matches.
   if (state.attackSeen.size > 600) state.attackSeen = trimSet(state.attackSeen, 300);

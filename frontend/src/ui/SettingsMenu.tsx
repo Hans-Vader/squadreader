@@ -1,7 +1,8 @@
 // Display-settings popover (gear button in the top-right controls). Houses the
 // team view (both teams, or one team's own map), the number-label options
-// (squad-leader numbers, all player/vehicle numbers) and the map-layer
-// show/hide toggles — the single home for what the map draws.
+// (squad-leader numbers, all player/vehicle numbers), the map-layer
+// show/hide toggles — the single home for what the map draws — and whether
+// the kill feed lists incaps.
 
 import { memo, useEffect, useRef, useState } from "react";
 import {
@@ -76,6 +77,19 @@ function Row({ k }: { k: LayerKey }) {
   );
 }
 
+// Incap rows in the kill feed, or the deaths alone.
+function IncapRow() {
+  const on = useViewerStore((s) => s.killFeedIncaps);
+  const setOn = useViewerStore((s) => s.setKillFeedIncaps);
+  return (
+    <label className="settings-row"
+           title="A row when a player is incapacitated, and a short one if they then die">
+      <input type="checkbox" checked={on} onChange={() => setOn(!on)} />
+      <span>Show incaps</span>
+    </label>
+  );
+}
+
 // Memoised so TopBar's per-frame re-render (it reads curSnap) stops here: the
 // menu takes no props, so nothing about it changes when the frame does.
 export const SettingsMenu = memo(function SettingsMenu() {
@@ -124,6 +138,8 @@ export const SettingsMenu = memo(function SettingsMenu() {
           {NUMBER_ORDER.map((k) => <Row key={k} k={k} />)}
           <div className="settings-group">Map layers</div>
           {LAYER_ORDER.map((k) => <Row key={k} k={k} />)}
+          <div className="settings-group">Kill feed</div>
+          <IncapRow />
         </div>
       )}
     </div>

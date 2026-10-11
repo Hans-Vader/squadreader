@@ -13,6 +13,17 @@ import type {
 } from "./types";
 
 export const KILL_FEED_MAX = 60;
+// Rows kept behind the panel: twice what it shows, because incap rows and
+// death rows share the list and the panel may be showing the deaths alone.
+export const KILL_FEED_KEEP = KILL_FEED_MAX * 2;
+
+const KF_INCAPS_LS_KEY = "sqr.killFeedIncaps";
+
+// Incap rows in the kill feed: on unless this browser turned them off.
+function loadKillFeedIncaps(): boolean {
+  try { return localStorage.getItem(KF_INCAPS_LS_KEY) !== "0"; }
+  catch { return true; }
+}
 
 // Backend publishes at a FIXED 0.5 Hz. These three constants are the entire
 // cadence contract for the live render path — keep them mutually consistent.
@@ -260,6 +271,9 @@ interface Store {
   // grow unbounded across a long match.
   killFeed: KillFeedEntry[];
   killFeedVisible: boolean;
+  // Show incap rows, or the deaths alone. A display choice over the same rows,
+  // so it is remembered and flips without recomputing anything.
+  killFeedIncaps: boolean;
 
   // Replay-only: the WHOLE match's kill feed, pre-computed once at load by a
   // single forward diff pass over every frame (so each attacker is resolved
@@ -331,6 +345,7 @@ interface Store {
   setReplayKillTimeline(tl: (KillFeedEntry & { frameIdx: number })[]): void;
   clearKillFeed(): void;
   toggleKillFeed(): void;
+  setKillFeedIncaps(v: boolean): void;
   toggleScoreboard(): void;
   setScoreboardVisible(v: boolean): void;
   toggleScoreboardSquad(team: 1 | 2, sqId: number): void;
@@ -368,6 +383,7 @@ export const useViewerStore = create<Store>((set) => ({
   killFeed: [],
   replayKillTimeline: [],
   killFeedVisible: true,
+  killFeedIncaps: loadKillFeedIncaps(),
   scoreboardVisible: false,
   timelineVisible: false,
   scoreboardClosedSquads: { 1: [], 2: [] },
@@ -565,9 +581,9 @@ export const useViewerStore = create<Store>((set) => ({
   pushKillFeed(entries) {
     if (!entries.length) return;
     set((s) => {
-      // Newest first; cap to KILL_FEED_MAX so the buffer can't grow
+      // Newest first; cap to KILL_FEED_KEEP so the buffer can't grow
       // unbounded across a 60-minute match (Squad can hit 300+ kills).
-      const next = [...entries, ...s.killFeed].slice(0, KILL_FEED_MAX);
+      const next = [...entries, ...s.killFeed].slice(0, KILL_FEED_KEEP);
       return { killFeed: next };
     });
   },
@@ -597,6 +613,11 @@ export const useViewerStore = create<Store>((set) => ({
   },
   toggleKillFeed() {
     set((s) => ({ killFeedVisible: !s.killFeedVisible }));
+  },
+  setKillFeedIncaps(v) {
+    try { localStorage.setItem(KF_INCAPS_LS_KEY, v ? "1" : "0"); }
+    catch { /* ignore quota / disabled storage */ }
+    set({ killFeedIncaps: v });
   },
   toggleScoreboard() {
     set((s) => ({ scoreboardVisible: !s.scoreboardVisible }));

@@ -172,31 +172,91 @@ function evt(o: any): any {
   eq(r2.newEntries.length, 0, "re-emitted event not double-counted");
 }
 
-// 10. REALISTIC: a wounded event attributes the death that follows it a
-//     few ticks later (Squad's incap -> bleed-out; no killed event fires).
+// 10. REALISTIC: A incapacitates B — a row at once — and the death that
+//     follows a few ticks later (Squad's incap -> bleed-out; no killed event
+//     fires) is attributed to A and marked as ending that incap.
 {
   const s = createDiffState();
   diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
-  // Tick 2: A incapacitates B — NO row (incaps aren't surfaced), B alive.
   const r1 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)],
-    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2,
+           causerWeapon:"BP_AK74_C", hitDistance: 87, headshot: true })]));
   // Tick 3: no new events, B bleeds out (death counter rises).
   const r2 = diffSnapshot(s, snap([P("A","a",1,1,0), P("B","b",2,0,1)], []));
-  eq(r1.newEntries.length, 0, "incap emits no row (kills only)");
+  eq(r1.newEntries.length, 1, "incap row at the incap");
+  eq(r1.newEntries[0]?.wounded, true, "the incap row is wounded");
+  eq(r1.newEntries[0]?.killer, "A", "incap row names the attacker");
+  eq(r1.newEntries[0]?.weaponClass, "BP_AK74_C", "incap row carries the weapon");
+  eq(r1.newEntries[0]?.hitDistance, 87, "incap row carries the distance");
+  eq(r1.newEntries[0]?.headshot, true, "incap row carries the headshot");
+  eq(r1.newEntries[0]?.victimTeam, 2, "incap row victim team");
+  eq(r1.newEntries[0]?.tk, false, "not a teamkill");
   eq(r2.newEntries.length, 1, "death row emitted on bleed-out");
   eq(r2.newEntries[0].killer, "A", "death attributed to the wounder A");
   eq(r2.newEntries[0].wounded, false, "the death row is a kill, not wounded");
+  eq(r2.newEntries[0].afterIncap, true, "the death ends the incap above it");
 }
 
-// 11. A wounded player who never dies (revived) yields no row at all.
+// 11. A wounded player who never dies (revived) yields the incap row only.
 {
   const s = createDiffState();
   diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
   const r1 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)],
     [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
   const r2 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)], []));
-  eq(r1.newEntries.length, 0, "incap emits no row");
-  eq(r2.newEntries.length, 0, "no kill row when the victim never dies");
+  eq(r1.newEntries.length, 1, "incap row");
+  eq(r2.newEntries.length, 0, "no death row when the victim never dies");
+}
+
+// 11b. An instant kill (a killed event, no wound) is one kill row, no incap.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,1,0), P("B","b",2,0,1)],
+    [evt({ killed:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  eq(r.newEntries.length, 1, "one row");
+  eq(r.newEntries[0]?.wounded, false, "a kill, not an incap");
+  eq(!!r.newEntries[0]?.afterIncap, false, "follows no incap");
+}
+
+// 11c. Finished off by someone else: the death names its own killer, so it
+//      is a full kill row, not the incap's short ending.
+{
+  const s = createDiffState();
+  const ps = (b: number, c: number) => [P("A","a",1,0,0), P("B","b",2,0,b), P("C","c",1,c,0)];
+  diffSnapshot(s, snap(ps(0, 0)));
+  diffSnapshot(s, snap(ps(0, 0),
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  const r = diffSnapshot(s, snap(ps(1, 1),
+    [evt({ killed:true, attacker:"C", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  eq(r.newEntries.length, 1, "one death row");
+  eq(r.newEntries[0]?.killer, "C", "credited to the finisher");
+  eq(!!r.newEntries[0]?.afterIncap, false, "not the incap's short ending");
+}
+
+// 11d. An incap the window has closed on (revived) does not claim a later
+//      death: once it is gone, a new kill by the same player is a kill row.
+{
+  const s = createDiffState();
+  const at = (players: any[], events: any[], es: number): any =>
+    ({ tick: 1, players, damageEvents: events, gameState: { elapsedSec: es }, vehicles: [] });
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)], [], 100));
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)],
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2, ts: 1 })], 100));
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)], [], 300));
+  const r = diffSnapshot(s, at([P("A","a",1,1,0), P("B","b",2,0,1)],
+    [evt({ killed:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2, ts: 2 })], 301));
+  eq(r.newEntries.length, 1, "one death row");
+  eq(!!r.newEntries[0]?.afterIncap, false, "the revived incap is closed");
+}
+
+// 11e. A teamkill incap is marked as one.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("D","d",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,0,0), P("D","d",1,0,0)],
+    [evt({ wounded:true, attacker:"A", victim:"D", victimEosId:"d", victimTeam:1 })]));
+  eq(r.newEntries[0]?.tk, true, "teamkill incap");
 }
 
 // 12. Most-recent attacker wins: A wounds B, then C wounds B, then B dies.

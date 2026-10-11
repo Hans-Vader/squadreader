@@ -392,6 +392,9 @@ export interface KillFeedEntry {
   tk: boolean;
   suicide: boolean;
   wounded: boolean;                       // incap row (kept distinct from final kill)
+  // A death row for a player whose incap row is already in the feed, by the
+  // same attacker or nobody: with incaps shown it only has to say they died.
+  afterIncap?: boolean;
   // A death with no killer, and what is known about it: "bledout" when the
   // game's own record has the victim's own soldier as the cause (bled out or
   // gave up while wounded), "died" when nothing at all names a cause. Absent

@@ -1101,6 +1101,15 @@ html, body, #root {
   font-weight: 700;
   letter-spacing: 0.05em;
 }
+.kf-row .kf-incap {
+  background: rgba(210,153,34,0.85);
+  color: #1a1206;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
 .kf-row .kf-arrow {
   color: var(--accent);
   font-size: 14px;

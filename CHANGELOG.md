@@ -6,7 +6,17 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-10-11
+
 ### Added
+- The local replay server can start a recording part-way through
+  (`?from=<epoch ms>`), so the viewer plays a replay while it downloads and
+  jumps ahead without waiting for the download to get there.
+- Viewer: incaps are listed in the kill feed as they happen, with the death
+  that follows as a short row ("Show incaps" in the settings); each objective
+  shows how many players of each team stand on it ("Players on objectives");
+  a team view shows one side's own map; the timeline marks the moments that
+  decided the round; frames can be stepped one at a time.
 - The reader can run in its own container beside a Squad server you already
   run, reading the game's memory across the container boundary. Getting there
   by hand is a research project - the game process lives in another PID
@@ -36,6 +46,37 @@ follows [Semantic Versioning](https://semver.org/).
   80/443.
 
 ### Fixed
+- A replay that failed to upload was sent again, whole, on every flush -
+  about every 30 seconds - for as long as the failure lasted. An operator
+  whose uploads were being refused saw the same 88 replays re-sent that way
+  until about 20 TiB had gone out (#5). A failed replay now waits before it
+  is tried again, a minute at first and four times longer after each failure
+  up to six hours, and is set aside after the eighth failure, about 18 hours
+  on: a central that is down overnight still receives it, a refusal that
+  never changes costs eight uploads. A refusal no retry can change - HTTP 413,
+  or a file over central's 2 GiB limit - sets it aside at once, before a byte
+  is sent. The match's stats go up separately and are not affected. A
+  recording that never turns up is no longer waited for after a day, and the
+  `[push]` log line counts what was set aside as `skipped`.
+- Replays over 90 MiB could not be published through a proxy that caps the
+  request size (Cloudflare's cap is 100 MiB, answered with a 413), which a
+  full 100-player match always exceeds. They now go up in 64 MiB parts that
+  central reassembles and checks against the whole file's SHA-256 before it
+  takes the replay; the agent also checks central's answer to the last part
+  before retiring it from the queue. Needs a central that accepts parts, as
+  squadreader.com does.
+- Publishing to central ran inside the reading loop, so a large upload froze
+  the live map and the recording for as long as it took - 70 seconds were
+  measured for one replay. It runs beside the loop now, one flush at a time.
+- Squad renamed `FireTeamIndex` to `FireteamIndex`. The reader matched field
+  names exactly, lost the fire-team index, and squad leaders' map markers
+  showed as "offline / unresolved". Field names are now matched without
+  regard to case.
+- Invasion objectives are read as capture zones; the map showed raw actor
+  names such as `BP_CaptureZoneCluster_C_13` in their place.
+- A player stuck reconnecting has two player states, neither with an EOS id,
+  and both were kept: the kill feed printed a death for that player on every
+  tick. One row per player is kept now.
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's
   decoder had no branch for them at all, so each one came back as a copy of the

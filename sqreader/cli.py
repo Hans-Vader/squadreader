@@ -707,9 +707,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
             res = ingest_client.flush_backlog(
                 push_backlog, stats_db_path, recordings_dir, push_creds or {},
                 push_replay_files=bool(config.get("push_replay")))
-            if res["sent"] or res["errors"]:
+            if res["sent"] or res["errors"] or res.get("skipped"):
                 print(f"[push] sent={res['sent']} pending={res['pending']} "
-                      f"errors={res['errors']}", file=sys.stderr)
+                      f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+                      file=sys.stderr)
         except Exception as _fe:
             print(f"[push] flush error: {_fe!r}", file=sys.stderr)
 
@@ -1446,7 +1447,8 @@ def cmd_stats_backfill(args: argparse.Namespace) -> int:
             push_backlog, stats_db, rec_dir, push_creds,
             push_replay_files=bool(config.get("push_replay")))
         print(f"push: sent={res['sent']} pending={res['pending']} "
-              f"errors={res['errors']}", file=sys.stderr)
+              f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+              file=sys.stderr)
     print(f"backfill complete: {done}/{len(eligible)} matches in "
           f"{time.time() - t0:.0f}s", file=sys.stderr)
     print("note: run `sqreader stats-elo-recalc --stats-db ...` afterwards — "

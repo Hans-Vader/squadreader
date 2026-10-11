@@ -2938,17 +2938,30 @@ def read_player(pm: ProcessMemory, alloc: FNameEntryAllocator,
             # PlayerStates that linger for a few ticks after a disconnect)
             # can't surface absurd counts/scores. Counters are non-negative
             # and never reach 1e6 in a round; scores stay well within ±1e6.
-            def _i(name, lo=-1000, hi=1_000_000):
+            # Field names are matched case-insensitively when the exact one is
+            # missing: a Squad update (10-2026) renamed FireTeamIndex to
+            # FireteamIndex, the exact lookup found nothing, fireTeamIndex went
+            # null for every player and no fireteam leader's marker could be
+            # attributed any more. Same field, same offset, same type.
+            def _k(name):
                 if name in psd:
-                    v = struct.unpack_from("<i", data, psd[name])[0]
+                    return name
+                low = name.lower()
+                return next((k for k in psd if k.lower() == low), None)
+            def _i(name, lo=-1000, hi=1_000_000):
+                k = _k(name)
+                if k is not None:
+                    v = struct.unpack_from("<i", data, psd[k])[0]
                     return v if lo <= v <= hi else None
             def _f(name, lo=-1e6, hi=1e6):
-                if name in psd:
-                    v = struct.unpack_from("<f", data, psd[name])[0]
+                k = _k(name)
+                if k is not None:
+                    v = struct.unpack_from("<f", data, psd[k])[0]
                     return v if (v == v and lo <= v <= hi) else None
             def _b(name):
-                if name in psd:
-                    return bool(data[psd[name]] & 1)
+                k = _k(name)
+                if k is not None:
+                    return bool(data[psd[k]] & 1)
             # PlayerNamePrefix is an FString member of PlayerStateDataObject
             # at +0x40 (within the embedded struct, NOT within our 128 B
             # snapshot above; need an absolute read from psd_base+offset).

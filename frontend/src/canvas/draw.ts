@@ -15,6 +15,10 @@ import { coord, viewWindow, worldToScreen } from "./worldToScreen";
 import { visibleCaps } from "./capVisibility";
 import { fallbackMap } from "./mapFallback";
 import { drawRuler, type Ruler } from "./ruler";
+import {
+  RALLY_RADIUS_CM, BURNED_SHOW_MS, burnersAt, enemiesInside,
+  type RallyBurner, type RallyRecord,
+} from "../state/rallyBurns";
 
 export function teamColor(t: number | null | undefined): string {
   if (t === 1) return "#d84a54";
@@ -1294,12 +1298,190 @@ function drawMarkers(ctx: CanvasRenderingContext2D, snap: Snapshot,
   }
 }
 
+// What the map needs to know about rallies beyond the frame it draws: their
+// sieges and burns over the whole recording (rallyBurns.ts), which ones the
+// cursor or the selection is on, and the replay clock.
+export interface RallyOverlay {
+  nowMs: number;
+  records: Map<string, RallyRecord>;
+  /** Burned recently enough to still be drawn where they stood. */
+  burned: RallyRecord[];
+  /** Rally ids whose 30 m radius is shown: the hovered one and the selected one. */
+  focus: Set<string>;
+  /** False on a one-team map, which shows none of the other side's positions. */
+  showEnemy: boolean;
+}
+
+// The 30 m siege radius, only for the rally under the cursor or selected: on
+// every rally at once it would bury the map. For a burned rally, the burners
+// are marked where they stood when they came inside, joined to the rally by a
+// thin line. Drawn under everything; the enemies inside a live rally's radius
+// are ringed separately, over the player pins (drawRallyIntruders).
+function drawRallyRadii(ctx: CanvasRenderingContext2D, snap: Snapshot,
+                        view: ViewState, cs: CanvasSize, ov: RallyOverlay) {
+  if (!ov.focus.size) return;
+  const ring = (cx: number, cy: number, r: number, col: string, burned: boolean) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = burned ? 0.08 : 0.14;
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.setLineDash([6 * cs.dpr, 4 * cs.dpr]);
+    ctx.lineWidth = 1.6 * cs.dpr;
+    ctx.strokeStyle = col;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    // Scale tick, so the circle reads as a distance and not a decoration.
+    const fs = 10 * cs.dpr;
+    ctx.font = `600 ${fs}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.lineWidth = 3 * cs.dpr;
+    ctx.strokeStyle = "rgba(10,12,16,0.85)";
+    ctx.strokeText("30 m", cx, cy - r - 2 * cs.dpr);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("30 m", cx, cy - r - 2 * cs.dpr);
+    ctx.restore();
+  };
+  const radiusPx = (x: number, y: number, cx: number) =>
+    Math.abs(worldToScreen(view, cs, x + RALLY_RADIUS_CM, y)[0] - cx);
+
+  for (const rp of snap.rallyPoints ?? []) {
+    if (!rp.position || !ov.focus.has(rp.id)) continue;
+    const [cx, cy] = worldToScreen(view, cs, rp.position.x, rp.position.y);
+    const r = radiusPx(rp.position.x, rp.position.y, cx);
+    ring(cx, cy, r, rp.sieged ? "#ff3b3b" : teamColor(rp.squadTeamId ?? rp.team), false);
+  }
+  for (const rec of ov.burned) {
+    if (!ov.focus.has(rec.id)) continue;
+    const [cx, cy] = worldToScreen(view, cs, rec.position.x, rec.position.y);
+    ring(cx, cy, radiusPx(rec.position.x, rec.position.y, cx), "#ff3b3b", true);
+    if (!ov.showEnemy) continue;
+    burnersAt(rec, ov.nowMs).forEach((b, i) => {
+      const [bx, by] = worldToScreen(view, cs, b.at.x, b.at.y);
+      const col = teamColor(b.teamId);
+      const k = (i === 0 ? 6 : 4.5) * cs.dpr;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(bx, by);
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = 1.2 * cs.dpr;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(bx - k, by - k); ctx.lineTo(bx + k, by + k);
+      ctx.moveTo(bx + k, by - k); ctx.lineTo(bx - k, by + k);
+      ctx.lineWidth = (i === 0 ? 3 : 2.2) * cs.dpr;
+      ctx.strokeStyle = "rgba(10,12,16,0.9)";
+      ctx.stroke();
+      ctx.lineWidth = (i === 0 ? 1.8 : 1.3) * cs.dpr;
+      ctx.strokeStyle = col;
+      ctx.stroke();
+      const fs = (i === 0 ? 11 : 10) * cs.dpr;
+      ctx.font = `${i === 0 ? "bold" : "600"} ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3 * cs.dpr;
+      ctx.strokeStyle = "rgba(10,12,16,0.85)";
+      ctx.strokeText(b.name, bx + k + 3 * cs.dpr, by);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(b.name, bx + k + 3 * cs.dpr, by);
+      ctx.restore();
+    });
+  }
+}
+
+// Red rings round the enemies inside a focused rally's radius, over their pins.
+function drawRallyIntruders(ctx: CanvasRenderingContext2D, snap: Snapshot,
+                            view: ViewState, cs: CanvasSize, ov: RallyOverlay) {
+  if (!ov.focus.size) return;
+  for (const rp of snap.rallyPoints ?? []) {
+    if (!rp.position || !ov.focus.has(rp.id)) continue;
+    for (const { player } of enemiesInside(snap, rp)) {
+      const q = player.soldier!.position!;
+      const [px, py] = worldToScreen(view, cs, q.x, q.y);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, 17 * cs.dpr, 0, 2 * Math.PI);
+      ctx.strokeStyle = "#ff3b3b";
+      ctx.lineWidth = 2.4 * cs.dpr;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+// A flame, a name and "+2" above a rally: who began the siege that is burning
+// it, or that burned it. Bordered in the burner's team colour, the other side's.
+function drawBurnerLabel(ctx: CanvasRenderingContext2D, cx: number, bottomY: number,
+                         burners: RallyBurner[], cs: CanvasSize, alpha: number) {
+  const first = burners[0];
+  const text = first
+    ? `\u{1F525} ${first.name}${burners.length > 1 ? ` +${burners.length - 1}` : ""}`
+    : "\u{1F525} burned";
+  const fs = 11 * cs.dpr;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `bold ${fs}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const w = ctx.measureText(text).width + 10 * cs.dpr;
+  const h = fs + 6 * cs.dpr;
+  roundRectPath(ctx, cx - w / 2, bottomY - h, w, h, 3 * cs.dpr);
+  ctx.fillStyle = "rgba(15,18,22,0.92)";
+  ctx.fill();
+  ctx.lineWidth = 1.2 * cs.dpr;
+  ctx.strokeStyle = first ? teamColor(first.teamId) : "#ff3b3b";
+  ctx.stroke();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, cx, bottomY - h / 2 + 0.5 * cs.dpr);
+  ctx.restore();
+}
+
+// A rally the enemy burned, left on the map for a minute where it stood: the
+// badge greyed and struck through, the burner's name above it. Fades out over
+// its last ten seconds.
+function drawBurnedRallies(ctx: CanvasRenderingContext2D, snap: Snapshot,
+                           view: ViewState, cs: CanvasSize, ov: RallyOverlay) {
+  const rallyImg = icon("./icons/mark/rallypoint.png");
+  const ready = rallyImg.complete && rallyImg.naturalWidth > 0;
+  const here = new Set((snap.rallyPoints ?? []).map((r) => r.id));
+  for (const rec of ov.burned) {
+    if (here.has(rec.id)) continue;
+    const [x, y] = worldToScreen(view, cs, rec.position.x, rec.position.y);
+    const size = 24 * cs.dpr;
+    const left = rec.burnedMs! + BURNED_SHOW_MS - ov.nowMs;
+    const alpha = Math.max(0.15, Math.min(1, left / 10_000));
+    ctx.save();
+    ctx.globalAlpha = 0.55 * alpha;
+    if (ready) drawDeployableBadge(ctx, x, y, size, "#5a5a5a", rallyImg, false);
+    ctx.globalAlpha = alpha;
+    const k = size * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k);
+    ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k);
+    ctx.lineWidth = 2.6 * cs.dpr;
+    ctx.strokeStyle = "#ff3b3b";
+    ctx.stroke();
+    ctx.restore();
+    drawBurnerLabel(ctx, x, y - size * 0.55 - 2 * cs.dpr,
+                    burnersAt(rec, ov.nowMs), cs, alpha);
+  }
+}
+
 // Rally point — uses the same drawDeployableBadge wrapper as FOBs/HABs
 // so it sits visually in the same family. Squad number drawn below
 // without a "Sqd " prefix; spawns-remaining counter top-right.
 function drawRallyPoints(ctx: CanvasRenderingContext2D, snap: Snapshot,
-                         view: ViewState, cs: CanvasSize) {
+                         view: ViewState, cs: CanvasSize,
+                         ov: RallyOverlay | null) {
   const rallyImg = icon("./icons/mark/rallypoint.png");
+  if (ov) drawBurnedRallies(ctx, snap, view, cs, ov);
   for (const rp of snap.rallyPoints ?? []) {
     if (!rp.position) continue;
     const [x, y] = worldToScreen(view, cs, rp.position.x, rp.position.y);
@@ -1324,6 +1506,13 @@ function drawRallyPoints(ctx: CanvasRenderingContext2D, snap: Snapshot,
         ctx.lineWidth = 2.2 * cs.dpr;
         ctx.stroke();
       }
+    }
+    // Under siege: name whoever began it, above the badge.
+    const rec = rp.sieged ? ov?.records.get(rp.id) : undefined;
+    if (rec && ov) {
+      const burners = burnersAt(rec, ov.nowMs);
+      if (burners.length)
+        drawBurnerLabel(ctx, x, y - size * 0.55 - 2 * cs.dpr, burners, cs, 1);
     }
 
     // Number-only label below the badge (the FOB pill uses the same
@@ -1724,7 +1913,8 @@ export function renderScene(ctx: CanvasRenderingContext2D, snap: Snapshot,
                             view: ViewState, cs: CanvasSize,
                             layers?: LayerVisibility,
                             follow?: FollowHighlight | null,
-                            ruler?: Ruler | null) {
+                            ruler?: Ruler | null,
+                            rallies?: RallyOverlay | null) {
   const on = (k: keyof LayerVisibility) => !layers || layers[k] !== false;
   // SL numbers default ON (absent = show, like the entity layers); the
   // all-numbers option defaults OFF (opt-in declutter, absent = hide).
@@ -1735,6 +1925,7 @@ export function renderScene(ctx: CanvasRenderingContext2D, snap: Snapshot,
   // Background overlays first — FOB radii are giant translucent discs
   // that should sit between the map texture and the entity badges.
   if (on("deployables")) drawFobRadii(ctx, snap, view, cs);
+  if (on("rallies") && rallies) drawRallyRadii(ctx, snap, view, cs, rallies);
   if (!hadTex) drawGrid(ctx, view, cs);
   drawLane(ctx, snap, view, cs);
   // Action-marker command lines as a low-level overlay — drawn before
@@ -1746,8 +1937,9 @@ export function renderScene(ctx: CanvasRenderingContext2D, snap: Snapshot,
   drawCaps(ctx, snap, view, cs);
   if (on("vehicles")) drawVehicles(ctx, snap, view, cs, showAllNumbers);
   if (on("markers")) drawMarkers(ctx, snap, view, cs);
-  if (on("rallies")) drawRallyPoints(ctx, snap, view, cs);
+  if (on("rallies")) drawRallyPoints(ctx, snap, view, cs, rallies ?? null);
   if (on("players")) drawPlayers(ctx, snap, view, cs, showSLNumbers, showAllNumbers, follow ?? null);
+  if (on("rallies") && rallies) drawRallyIntruders(ctx, snap, view, cs, rallies);
   if (on("projectiles")) drawProjectiles(ctx, snap, view, cs);
   // Last, and never gated by a layer toggle: a measurement is something the
   // viewer asked for a second ago, so it has to be on top of whatever it was

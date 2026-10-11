@@ -4,11 +4,11 @@
 // store; tooltip state is passed in (App owns it for layout reasons).
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import { renderScene, type FollowHighlight } from "./draw";
+import { renderScene, type FollowHighlight, type RallyOverlay } from "./draw";
 import { lerpSnap } from "./interpolation";
 import { autoFit, refitAspect, screenToWorld, viewWindow } from "./worldToScreen";
 import { hitTest, type Hit } from "./hitTest";
-import { teamViewSnapshot } from "./teamView";
+import { teamViewSnapshot, type TeamView } from "./teamView";
 import type { Ruler } from "./ruler";
 
 // How close a new drag has to start, in world units at 1x zoom, to be
@@ -18,7 +18,9 @@ const EXTEND_SNAP_CM = 1500;
 import { useViewerStore, RENDER_DELAY_MS } from "../state/viewerStore";
 import { replayClock } from "../state/replayClock";
 import { DEFAULT_VIEW } from "../state/types";
-import type { Snapshot, ViewState } from "../state/types";
+import type { RallyPoint, Snapshot, ViewState } from "../state/types";
+import { burnedAt, ghostRally, type RallyRecord } from "../state/rallyBurns";
+import type { SelectedInfo } from "../state/viewerStore";
 
 interface Props {
   onHover: (hit: Hit | null, cssX: number, cssY: number) => void;
@@ -47,6 +49,38 @@ function followView(view: ViewState, followKey: string | null,
   return { ...view, panX: pos.x - cx0, panY: pos.y - cy0 };
 }
 
+// Rally sieges, burns and the radius focus for one drawn frame. The id index is
+// built once per published record array, the ghost per record, so a frame
+// costs a filter over a few dozen records and nothing else.
+const recordIndex = new WeakMap<RallyRecord[], Map<string, RallyRecord>>();
+const ghosts = new WeakMap<RallyRecord, RallyPoint>();
+function rallyOverlay(records: RallyRecord[], drawn: Snapshot, teamView: TeamView,
+                      selected: SelectedInfo | null, hovered: string | null,
+                      nowMs: number): { overlay: RallyOverlay; ghosts: RallyPoint[] } {
+  let byId = recordIndex.get(records);
+  if (!byId) {
+    byId = new Map(records.map((r) => [r.id, r]));
+    recordIndex.set(records, byId);
+  }
+  const burned = burnedAt(records, nowMs)
+    .filter((r) => teamView === 0 || r.team === teamView);
+  const here = new Set((drawn.rallyPoints ?? []).map((r) => r.id));
+  const hit: RallyPoint[] = [];
+  for (const r of burned) {
+    if (here.has(r.id)) continue;
+    let g = ghosts.get(r);
+    if (!g) { g = ghostRally(r); ghosts.set(r, g); }
+    hit.push(g);
+  }
+  const focus = new Set<string>();
+  if (hovered) focus.add(hovered);
+  if (selected?.kind === "rally") focus.add(selected.id);
+  return {
+    overlay: { nowMs, records: byId, burned, focus, showEnemy: teamView === 0 },
+    ghosts: hit,
+  };
+}
+
 export function MapCanvas({ onHover, onLeave, onClick }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ x0: number; y0: number; panX0: number; panY0: number } | null>(null);
@@ -72,8 +106,11 @@ export function MapCanvas({ onHover, onLeave, onClick }: Props) {
   // display snapshot AND the follow-adjusted view. Hover/click/follow read
   // this so hit-testing lines up with what's actually on screen (the drawn
   // positions lag curSnap by ~DELAY under the render-delay buffer).
-  const displayRef = useRef<{ snap: Snapshot | null; view: ViewState }>(
-    { snap: null, view: { ...DEFAULT_VIEW } });
+  const displayRef = useRef<{ snap: Snapshot | null; view: ViewState;
+                              ghosts: RallyPoint[] }>(
+    { snap: null, view: { ...DEFAULT_VIEW }, ghosts: [] });
+  // The rally under the cursor, whose 30 m radius the render loop draws.
+  const hoverRallyRef = useRef<string | null>(null);
   // Monotonic render-clock latch — belt-and-suspenders. Inert while
   // RENDER_DELAY_MS is constant (now() only increases, so now-DELAY never
   // regresses), but hard-guarantees the map can never step backward if DELAY
@@ -227,12 +264,17 @@ export function MapCanvas({ onHover, onLeave, onClick }: Props) {
         // (which keeps tracking whoever it follows) and before drawing AND
         // the hit-test frame, so a hidden entity cannot be hovered or clicked.
         const drawn = teamViewSnapshot(shown, s.teamView);
+        const nowMs = s.mode === "replay" && replayClock.valid
+          ? replayClock.ms : Date.parse(drawn.timestamp ?? "");
+        const rallies = rallyOverlay(s.rallyRecords, drawn, s.teamView,
+          s.selectedInfo, hoverRallyRef.current, nowMs);
         renderScene(ctx, drawn, rview, cs, s.layers, followHl,
-                    rulerRef.current);
-        displayRef.current = { snap: drawn, view: rview };
+                    rulerRef.current, rallies.overlay);
+        displayRef.current = { snap: drawn, view: rview,
+                               ghosts: s.layers.rallies ? rallies.ghosts : [] };
       } else {
         ctx.clearRect(0, 0, cs.width, cs.height);
-        displayRef.current = { snap: null, view: s.view };
+        displayRef.current = { snap: null, view: s.view, ghosts: [] };
       }
       raf = requestAnimationFrame(tick);
     };
@@ -351,12 +393,12 @@ export function MapCanvas({ onHover, onLeave, onClick }: Props) {
       if (movedPx > 4 || elapsedMs > 500) return;
       // Re-hit-test at the canvas-local down position, against the SAME
       // delayed/interpolated frame + view the renderer drew.
-      const { snap, view } = displayRef.current;
+      const { snap, view, ghosts } = displayRef.current;
       const cssSize = { width: cv.clientWidth, height: cv.clientHeight };
       const [wx, wy] = screenToWorld(view, cssSize, down.x, down.y);
       const win = viewWindow(view);
       const worldRadius = 12 * (win.w / Math.max(1, cssSize.width));
-      const hit = hitTest(snap, wx, wy, worldRadius);
+      const hit = hitTest(snap, wx, wy, worldRadius, ghosts);
       // Clicking bare map puts the measurement away; left pinned there it
       // stops being an answer and becomes litter. Clicking a player or a
       // vehicle does NOT, because inspecting what you just measured between
@@ -516,12 +558,12 @@ export function MapCanvas({ onHover, onLeave, onClick }: Props) {
           const moved = Math.hypot(p.x - cur.downX!, p.y - cur.downY!);
           const elapsed = performance.now() - cur.downT!;
           if (moved <= 8 && elapsed < 500) {
-            const { snap, view } = displayRef.current;
+            const { snap, view, ghosts } = displayRef.current;
             const cssSize = { width: cv.clientWidth, height: cv.clientHeight };
             const [wx, wy] = screenToWorld(view, cssSize, cur.downX!, cur.downY!);
             const win = viewWindow(view);
             const worldRadius = 16 * (win.w / Math.max(1, cssSize.width));
-            onClick(hitTest(snap, wx, wy, worldRadius));
+            onClick(hitTest(snap, wx, wy, worldRadius, ghosts));
           }
         }
       }
@@ -546,22 +588,31 @@ export function MapCanvas({ onHover, onLeave, onClick }: Props) {
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
     const onMove = (e: MouseEvent) => {
-      if (dragRef.current) { onHover(null, 0, 0); return; }
+      if (dragRef.current) {
+        hoverRallyRef.current = null;
+        onHover(null, 0, 0);
+        return;
+      }
       // Hit-test against the SAME delayed/interpolated frame + view the
       // renderer drew, so hover lines up with what's on screen.
-      const { snap, view } = displayRef.current;
+      const { snap, view, ghosts } = displayRef.current;
       const cssSize = { width: cv.clientWidth, height: cv.clientHeight };
       const [wx, wy] = screenToWorld(view, cssSize, e.offsetX, e.offsetY);
       const win = viewWindow(view);
       const worldRadius = 12 * (win.w / Math.max(1, cssSize.width));
-      const hit = hitTest(snap, wx, wy, worldRadius);
+      const hit = hitTest(snap, wx, wy, worldRadius, ghosts);
+      hoverRallyRef.current = hit?.hit.type === "rally" ? hit.hit.e.id : null;
       onHover(hit, e.offsetX, e.offsetY);
     };
+    const onOut = () => {
+      hoverRallyRef.current = null;
+      onLeave();
+    };
     cv.addEventListener("mousemove", onMove);
-    cv.addEventListener("mouseleave", onLeave);
+    cv.addEventListener("mouseleave", onOut);
     return () => {
       cv.removeEventListener("mousemove", onMove);
-      cv.removeEventListener("mouseleave", onLeave);
+      cv.removeEventListener("mouseleave", onOut);
     };
   }, [onHover, onLeave]);
 

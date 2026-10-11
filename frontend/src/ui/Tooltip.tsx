@@ -4,6 +4,8 @@ import { teamColor } from "../canvas/draw";
 import type { Hit } from "../canvas/hitTest";
 import { passengersOf } from "../canvas/passengers";
 import { useViewerStore } from "../state/viewerStore";
+import { replayClock } from "../state/replayClock";
+import { burnersAt, clockMs, enemiesInside, type RallyRecord } from "../state/rallyBurns";
 import type { Snapshot } from "../state/types";
 import { vehicleDisplayName } from "../data/vehicleDisplayNames";
 import { markerLabel, findPlacer, ftLabel, fmtInt } from "./entityInfo";
@@ -14,7 +16,7 @@ function dot(t: number | null | undefined) {
   return <span className="swatch" style={{ background: teamColor(t) }} />;
 }
 
-function body(hit: Hit, snap: Snapshot | null) {
+function body(hit: Hit, snap: Snapshot | null, rallies: RallyRecord[]) {
   switch (hit.hit.type) {
     case "player": {
       const e = hit.hit.e;
@@ -101,6 +103,33 @@ function body(hit: Hit, snap: Snapshot | null) {
         )}
       </>;
     }
+    case "rally": {
+      const e = hit.hit.e;
+      const now = clockMs(snap, replayClock);
+      const rec = rallies.find((r) => r.id === e.id);
+      const burned = rec?.burnedMs != null && now >= rec.burnedMs;
+      const burners = rec ? burnersAt(rec, now) : [];
+      const inside = !burned && snap ? enemiesInside(snap, e).length : 0;
+      return <>
+        {dot(e.squadTeamId ?? e.team)}<b>Rally</b>
+        {e.squadId != null && <> · Squad {e.squadId}</>}
+        {e.squadName && <span style={{ opacity: .6 }}> {e.squadName}</span>}
+        <br />
+        {burned
+          ? <span style={{ color: "var(--bad)" }}>burned {Math.max(0, Math.round((now - rec!.burnedMs!) / 1000))}s ago</span>
+          : e.sieged
+            ? <span style={{ color: "var(--bad)" }}>under siege</span>
+            : <>{e.spawningEnabled ? "spawning" : "spawning disabled"}
+                {e.spawnsRemaining != null && e.spawnsRemaining >= 0 && ` · ${e.spawnsRemaining} spawns`}</>}
+        {burners.length > 0 && <>
+          <br />{burned ? "Burned by" : "Sieged by"}: {dot(burners[0]!.teamId)}<b>{burners[0]!.name}</b>
+          {burners[0]!.clanTag && <span style={{ opacity: .6 }}> [{burners[0]!.clanTag}]</span>}
+          {burners.length > 1 && <><br /><span style={{ opacity: .6 }}>
+            also inside: {burners.slice(1).map((b) => b.name).join(", ")}</span></>}
+        </>}
+        {!burned && <><br /><span style={{ opacity: .6 }}>enemies within 30 m: {inside}</span></>}
+      </>;
+    }
     case "projectile": {
       const e = hit.hit.e;
       return <>
@@ -117,6 +146,7 @@ export function Tooltip({ hit, x, y }: Props) {
   // (interpolation already drives the canvas at 60 fps; tooltip
   // refresh on tick boundaries is fine — passengers are stable).
   const snap = useViewerStore((s) => s.curSnap);
+  const rallies = useViewerStore((s) => s.rallyRecords);
   if (!hit) return null;
   // Clamp into the viewport so the box doesn't overflow.
   const left = Math.max(4, Math.min(window.innerWidth - 240, x + 12));
@@ -124,7 +154,7 @@ export function Tooltip({ hit, x, y }: Props) {
   return (
     <div id="tooltip" style={{ left, top, display: "block",
                                whiteSpace: "normal", maxWidth: 280 }}>
-      {body(hit, snap)}
+      {body(hit, snap, rallies)}
     </div>
   );
 }

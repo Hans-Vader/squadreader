@@ -7,6 +7,7 @@ import { DEFAULT_VIEW } from "./types";
 import { patchSnapshot, resetCarryOver } from "./carryOver";
 import { replayLoad } from "./replayLoad";
 import type { ReplayMarker } from "./replayMarkers";
+import type { RallyRecord } from "./rallyBurns";
 import type { TeamView } from "../canvas/teamView";
 import type {
   ConnStatus, KillFeedEntry, Mode, RecordingMeta, Snapshot, TeamState, ViewState,
@@ -285,6 +286,13 @@ interface Store {
   // on every seek (its attack buffer was already consumed). Empty in live mode.
   replayKillTimeline: (KillFeedEntry & { frameIdx: number })[];
 
+  // Replay-only: every rally the recording has shown, with its sieges and who
+  // began them, and whether it was burned (see rallyBurns.ts). Grown by the
+  // loader as frames arrive and replaced, never mutated, when it changes. Kept
+  // across a seek that restarts the download, like the timeline markers: a
+  // rally burned before the new window is still a fact about the match.
+  rallyRecords: RallyRecord[];
+
   // Scoreboard overlay (Tab to toggle, like Squad in-game) — modal that
   // covers the map with team rosters + per-player stats. closedSquads
   // stores the user-collapsed squad ids per team (default expanded).
@@ -343,6 +351,7 @@ interface Store {
   pushKillFeed(entries: KillFeedEntry[]): void;
   setKillFeed(entries: KillFeedEntry[]): void;
   setReplayKillTimeline(tl: (KillFeedEntry & { frameIdx: number })[]): void;
+  setRallyRecords(r: RallyRecord[]): void;
   clearKillFeed(): void;
   toggleKillFeed(): void;
   setKillFeedIncaps(v: boolean): void;
@@ -382,6 +391,7 @@ export const useViewerStore = create<Store>((set) => ({
   followVehicleId: null,
   killFeed: [],
   replayKillTimeline: [],
+  rallyRecords: [],
   killFeedVisible: true,
   killFeedIncaps: loadKillFeedIncaps(),
   scoreboardVisible: false,
@@ -401,7 +411,8 @@ export const useViewerStore = create<Store>((set) => ({
     // without that, the first replay frame is diffed against the live match's
     // stats and invents kills that never happened.
     resetCarryOver();
-    set({ mode: m, snapBuffer: [], killFeed: [], replayKillTimeline: [] });
+    set({ mode: m, snapBuffer: [], killFeed: [], replayKillTimeline: [],
+          rallyRecords: [] });
   },
   setStatus(s) {
     set({ status: s });
@@ -477,7 +488,8 @@ export const useViewerStore = create<Store>((set) => ({
     // kept whatever it did not mention, so a second recording inherited the
     // first one's totalMs and bufferedMs for a render or two — the timeline
     // drew the old match's length around the new match's frames.
-    set((s) => ({ replay: { ...PRISTINE_REPLAY, id, loadNonce: s.replay.loadNonce } }));
+    set((s) => ({ replay: { ...PRISTINE_REPLAY, id, loadNonce: s.replay.loadNonce },
+                  rallyRecords: [] }));
   },
   appendReplayFrames(frames) {
     set((s) => {
@@ -607,6 +619,9 @@ export const useViewerStore = create<Store>((set) => ({
   },
   setReplayKillTimeline(tl) {
     set({ replayKillTimeline: tl });
+  },
+  setRallyRecords(r) {
+    set({ rallyRecords: r });
   },
   clearKillFeed() {
     set({ killFeed: [] });

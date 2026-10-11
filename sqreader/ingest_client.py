@@ -211,9 +211,64 @@ def download_artifact(creds: dict[str, str], file: str, *,
     return _send(req, timeout=timeout)
 
 
+#: A replay above this goes up in parts. The proxy in front of central
+#: (Cloudflare) answers any request body over 100 MiB with its own 413 before
+#: central ever sees it, and a full match recorded at 4 Hz is 250-350 MiB: every
+#: one of those replays was being given up on. Parts keep each request well
+#: under the cap, whatever address central is reached at.
+_REPLAY_CHUNK_THRESHOLD = 90 * 1024 * 1024
+_REPLAY_CHUNK_BYTES = 64 * 1024 * 1024
+
+
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for buf in iter(lambda: f.read(1 << 20), b""):
+            h.update(buf)
+    return h.hexdigest()
+
+
+def _push_replay_parts(creds: dict[str, str], match_id: str, server_id: str,
+                       path: Path, size: int, *, seq: int, timeout: float) -> None:
+    """Publish a replay too large for one request as numbered parts. Central
+    keeps them until all are in and joins them only if the result is exactly
+    `size` bytes with this sha256. Each part is read, sealed and sent on its
+    own, so neither the whole file nor an envelope gone stale is held for the
+    length of the upload; a part that fails is simply sent again next flush."""
+    whole = _file_sha256(path)
+    count = (size + _REPLAY_CHUNK_BYTES - 1) // _REPLAY_CHUNK_BYTES
+    with path.open("rb") as f:
+        for index in range(count):
+            part = f.read(_REPLAY_CHUNK_BYTES)
+            manifest = seal_json(
+                {"schema": SCHEMA_REPLAY, "server_id": server_id,
+                 "match_id": match_id, "size": size, "sha256": whole,
+                 "chunk_index": index, "chunk_count": count,
+                 "chunk_size": len(part),
+                 "chunk_sha256": hashlib.sha256(part).hexdigest()},
+                secret=_secret(creds), agent_id=creds["SQREADER_AGENT_ID"],
+                seq=seq)
+            req = urllib.request.Request(
+                _push_base(creds) + "/ingest/replay", data=part, method="POST",
+                headers={"Content-Type": "application/octet-stream",
+                         "X-Sqr-Manifest": json.dumps(manifest,
+                                                      separators=(",", ":")),
+                         "User-Agent": _UA})
+            _send(req, timeout=timeout)
+
+
 def push_replay(creds: dict[str, str], match_id: str, server_id: str,
                 sqrx_path: str | Path, *, seq: int, timeout: float = 300.0) -> None:
-    data = Path(sqrx_path).read_bytes()
+    path = Path(sqrx_path)
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise PushError(f"replay unreadable: {exc}") from exc
+    if size > _REPLAY_CHUNK_THRESHOLD:
+        _push_replay_parts(creds, match_id, server_id, path, size,
+                           seq=seq, timeout=timeout)
+        return
+    data = path.read_bytes()
     manifest = seal_json(
         {"schema": SCHEMA_REPLAY, "server_id": server_id, "match_id": match_id,
          "size": len(data), "sha256": hashlib.sha256(data).hexdigest()},

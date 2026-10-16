@@ -15,6 +15,9 @@ follows [Semantic Versioning](https://semver.org/).
   mod, and the match ignores case, spaces and underscores because how the game
   spells a modded layer is not knowable until it has run once. See the README
   for the format and for where the two corner numbers come from.
+- Their RAAS flags can be drawn too: `data/static/custom_capzones.json` holds
+  the cap-zone shapes of a modded layer, keyed by layer name, and wins over the
+  generated `capzones.json` that `scripts/fetch_capzones.py` rewrites.
 
 ### Changed
 - The Google Analytics tag inherited from upstream is gone, so the web UI no

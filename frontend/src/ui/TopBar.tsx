@@ -99,45 +99,47 @@ export function TopBar() {
             BETA
           </span>
           <span className={"pill " + statusClass}>
-            {mode === "replay" ? (live ? "live" : "recording") : (STATUS_TR[status] ?? status)}
+            {mode === "replay" ? (live ? "live" : "replay") : (STATUS_TR[status] ?? status)}
           </span></div>
-        <div>tick <b>{curSnap?.tick ?? "—"}</b>
-          {" · "}<span>{rate}</span>
-          {" · "}
-          {/* Which match am I watching? The opaque match id used to be the only
-              answer the player chrome gave — unreadable, unmemorable, and no
-              help at all once you had opened three of them. The layer and the
-              date are already in the frame we are rendering. */}
-          {mode === "replay"
-            ? <span title={replayId ?? undefined}>
-                {gs?.mapName ?? replayId ?? "—"}
-                {matchDate ? " · " + matchDate : ""}
-              </span>
-            : <span className={"age " + ageClass}
+        {/* Which match am I watching? The opaque match id used to be the only
+            answer the player chrome gave — unreadable, unmemorable, and no
+            help at all once you had opened three of them. The layer and the
+            date are already in the frame we are rendering. The tick and the
+            feed rate are an operator's health check on a live feed; on a
+            recording they only said how it was recorded, so they stay live. */}
+        {mode === "replay"
+          ? <div className="hud-match" title={replayId ?? undefined}>
+              {gs?.mapName ?? replayId ?? "—"}
+              {matchDate ? " · " + matchDate : ""}
+            </div>
+          : <div>tick <b>{curSnap?.tick ?? "—"}</b>
+              {" · "}<span>{rate}</span>
+              {" · "}
+              <span className={"age " + ageClass}
                     title="time since last data">
                 {ageSec == null ? "No data" : `data ${ageSec.toFixed(0)}s`}
-              </span>}
-        </div>
+              </span>
+            </div>}
       </div>
       <div id="controls">
         {/* Exit-replay: return to the page the replay was opened from (site
             home as a fallback). Shown only while watching a recording. */}
         {mode === "replay" && !live && (
           <button className="tb-back" onClick={goBack}
-                  title="back to previous page / site">← Back</button>
+                  title="Back to the previous page">← Back</button>
         )}
-        <button onClick={openPicker} title="watch past matches">
-          Past Matches
+        <button className="tb-past" onClick={openPicker} title="Watch past matches">
+          Past matches
         </button>
-        <span>zoom <b>{view.zoom.toFixed(1)}x</b></span>
-        <button onClick={() => resetView()} title="reset view (F)">Fit</button>
         <button onClick={() => toggleScoreboard()}
-                title="scoreboard (Tab)">score</button>
+                title="Scoreboard (Tab)">Scoreboard</button>
         {mode === "replay" && (
           <button className={timelineVisible ? "on" : ""}
                   onClick={() => toggleTimeline()}
-                  title="ticket-loss timeline (G)">Tickets</button>
+                  title="Ticket-loss timeline (G)">Tickets</button>
         )}
+        <button onClick={() => resetView()}
+                title={`Fit the map (F) · zoom ${view.zoom.toFixed(1)}×`}>Fit</button>
         <LiveControls />
         <ClipRecorder />
         <SettingsMenu />

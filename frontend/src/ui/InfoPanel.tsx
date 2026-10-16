@@ -7,6 +7,10 @@ import type React from "react";
 import { teamColor } from "../canvas/draw";
 import { vehicleDisplayName } from "../data/vehicleDisplayNames";
 import { useViewerStore } from "../state/viewerStore";
+import { replayClock } from "../state/replayClock";
+import {
+  burnersAt, clockMs, enemiesInside, ghostRally, type RallyRecord,
+} from "../state/rallyBurns";
 import type {
   CaptureZone, Deployable, Marker, Projectile, RallyPoint, Vec3,
   VehicleSpawner,
@@ -74,7 +78,8 @@ function posRow(pos: Vec3 | null | undefined) {
 
 function MarkerBody({ e }: { e: Marker }) {
   const players = useViewerStore((s) => s.curSnap?.players ?? []);
-  const placer = findPlacer(e, players);
+  const squads = useViewerStore((s) => s.curSnap?.squads ?? []);
+  const placer = findPlacer(e, players, squads);
   return (
     <>
       <Row label="TEAM">{e.team ?? "—"}</Row>
@@ -157,13 +162,55 @@ function SpawnerBody({ e }: { e: VehicleSpawner }) {
   );
 }
 
-function RallyBody({ e }: { e: RallyPoint }) {
+// Who came inside 30 m during the siege, in the order they did. The first is
+// the one whose arrival the game answered by putting the rally under siege.
+function RallyBurners({ rec, now, burned }: {
+  rec: RallyRecord; now: number; burned: boolean;
+}) {
+  const burners = burnersAt(rec, now);
+  if (!burners.length) {
+    return burned
+      ? <Row label="BURNED BY"><span className="info-mute">not seen in this recording</span></Row>
+      : null;
+  }
+  const start = burned ? rec.sieges[rec.sieges.length - 1]?.startMs : null;
+  return (
+    <Row label={burned ? "BURNED BY" : "SIEGED BY"}>
+      {burners.map((b, i) => (
+        <div key={b.key}>
+          <span className="info-dot" style={{ background: teamColor(b.teamId) }} />
+          {i === 0 ? <b>{b.name}</b> : b.name}
+          {b.clanTag && <span className="info-mute"> [{b.clanTag}]</span>}
+          <span className="info-mute"> · {b.distM.toFixed(0)} m
+            {start != null && i > 0 ? ` · +${Math.round((b.enteredMs - start) / 1000)}s` : ""}</span>
+        </div>
+      ))}
+    </Row>
+  );
+}
+
+function RallyBody({ e, rec, now }: {
+  e: RallyPoint; rec: RallyRecord | null; now: number;
+}) {
+  const snap = useViewerStore((s) => s.curSnap);
+  const burned = rec?.burnedMs != null && now >= rec.burnedMs;
   return (
     <>
       <Row label="TEAM">{e.team ?? "—"}</Row>
       <Row label="SQUAD">{e.squadName ?? (e.squadId != null ? `#${e.squadId}` : "—")}</Row>
-      {e.spawnsRemaining != null && <Row label="SPAWNS">{e.spawnsRemaining}</Row>}
-      <Badges items={[["Spawning", e.spawningEnabled], ["Sieged", e.sieged]]} />
+      {burned && (
+        <Row label="BURNED">
+          <span className="info-danger">
+            {Math.max(0, Math.round((now - rec!.burnedMs!) / 1000))}s ago
+          </span>
+        </Row>
+      )}
+      {rec && (burned || e.sieged) && <RallyBurners rec={rec} now={now} burned={burned} />}
+      {!burned && snap && (
+        <Row label="ENEMIES ≤30 m">{enemiesInside(snap, e).length}</Row>
+      )}
+      {!burned && e.spawnsRemaining != null && <Row label="SPAWNS">{e.spawnsRemaining}</Row>}
+      {!burned && <Badges items={[["Spawning", e.spawningEnabled], ["Sieged", e.sieged]]} />}
       <Row label="ID">{e.id}</Row>
       {posRow(e.position)}
     </>
@@ -223,6 +270,7 @@ export function InfoPanel() {
   const sel   = useViewerStore((s) => s.selectedInfo);
   const snap  = useViewerStore((s) => s.curSnap);
   const close = useViewerStore((s) => s.setSelectedInfo);
+  const rallies = useViewerStore((s) => s.rallyRecords);
 
   if (!sel) return null;
 
@@ -254,8 +302,14 @@ export function InfoPanel() {
       break;
     }
     case "rally": {
-      const e = find<RallyPoint>(snap?.rallyPoints);
-      if (e) { title = "Rally Point"; team = e.team; bodyEl = <RallyBody e={e} />; }
+      // A burned rally has left the frame but is still on the map where it
+      // stood, so it is resolved from its record instead.
+      const now = clockMs(snap, replayClock);
+      const rec = rallies.find((r) => r.id === sel.id) ?? null;
+      const burned = rec?.burnedMs != null && now >= rec.burnedMs;
+      const e = find<RallyPoint>(snap?.rallyPoints) ?? (burned ? ghostRally(rec!) : null);
+      if (e) { title = burned ? "Rally Point · burned" : "Rally Point"; team = e.team;
+               bodyEl = <RallyBody e={e} rec={rec} now={now} />; }
       break;
     }
     case "capzone": {

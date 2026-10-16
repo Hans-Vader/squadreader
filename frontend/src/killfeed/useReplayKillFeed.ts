@@ -15,7 +15,7 @@
 // a kill, or a seek) — not on every playback tick.
 
 import { useEffect } from "react";
-import { useViewerStore, KILL_FEED_MAX } from "../state/viewerStore";
+import { useViewerStore, KILL_FEED_KEEP } from "../state/viewerStore";
 
 export function useReplayKillFeed() {
   useEffect(() => {
@@ -37,7 +37,7 @@ export function useReplayKillFeed() {
       if (lo === lastCount) return;  // visible set unchanged → no store write
       lastCount = lo;
       // Newest first, capped — same shape the live feed produces.
-      const start = Math.max(0, lo - KILL_FEED_MAX);
+      const start = Math.max(0, lo - KILL_FEED_KEEP);
       useViewerStore.getState().setKillFeed(tl.slice(start, lo).reverse());
     });
     return unsub;

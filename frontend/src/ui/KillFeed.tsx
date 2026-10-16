@@ -1,6 +1,8 @@
 // Killfeed panel — bottom-right corner. Newest entry at the top.
 // Renders three row layouts: standard kill (killer → weapon → victim),
-// wounded incap (yellow tint), world-cause (single-sentence row).
+// wounded incap (yellow tint), world-cause (single-sentence row). With incaps
+// shown, the death that follows an incap is the short sentence "X died" — its
+// killer is already on the incap row above it.
 // Click on a name pins that player in the player-detail panel.
 
 import { teamColor } from "../canvas/draw";
@@ -8,8 +10,9 @@ import { roleIconUrl } from "../canvas/icons";
 import { vehicleDisplayName } from "../data/vehicleDisplayNames";
 import { weaponDisplayName, weaponStatic } from "../data/weaponsStatic";
 import { vehicleWeaponStatic } from "../data/vehicleWeaponsStatic";
+import { useMemo } from "react";
 import { useStaticCatalogs } from "../data/staticCatalogs";
-import { useViewerStore } from "../state/viewerStore";
+import { useViewerStore, KILL_FEED_MAX } from "../state/viewerStore";
 import { playerKey } from "./PlayerPanel";
 import {
   damageTypeCategoryLabel, deathCauseFromDamageType, deathCausePhrase,
@@ -70,16 +73,49 @@ function VehicleChip({ cls }: { cls: string | null }) {
   return <span className="kf-veh" title={name}>{name}</span>;
 }
 
-interface RowProps { e: KillFeedEntry; select: (name: string | null) => void; }
-function Row({ e, select }: RowProps) {
+const NO_KILLER: Record<"bledout" | "died", { phrase: string; title: string }> = {
+  bledout: { phrase: "has bled out",
+             title: "Bled out or gave up while wounded — no killer recorded" },
+  died: { phrase: "died", title: "Died — nothing recorded who or what killed them" },
+};
+
+interface RowProps {
+  e: KillFeedEntry;
+  incaps: boolean;
+  select: (name: string | null) => void;
+}
+function Row({ e, incaps, select }: RowProps) {
   const time = fmtGameTime(e.gameTimeSec);
+
+  // The death that ends an incap already listed: who did it is on that row,
+  // and whether they gave up, bled out or were finished off by the same
+  // player is not something the server's record tells apart.
+  if (incaps && e.afterIncap) {
+    return (
+      <div className="kf-row kf-row-world">
+        <span className="kf-time">{time}</span>
+        <NameChip name={e.victim} team={e.victimTeam} roleId={e.victimRoleId}
+                  onClick={() => select(e.victim)} />
+        <VehicleChip cls={e.victimVehicleClass} />
+        <span className="kf-world-phrase"
+              title={"Gave up, bled out or was finished off after the incap"
+                     + (e.killer ? ` by ${e.killer}` : "")}>
+          died
+        </span>
+      </div>
+    );
+  }
   const rowCls = ["kf-row",
     e.wounded ? "kf-wounded" : "",
     e.tk ? "kf-tk" : "",
     e.suicide ? "kf-suicide" : "",
   ].filter(Boolean).join(" ");
-  const worldCause = !e.killer && !e.suicide
-    ? deathCauseFromDamageType(e.damageType) : null;
+  // A death nobody is credited with is a sentence about the victim, not a
+  // "?" in the killer's place: "?" claimed a killer nobody saw.
+  const noKiller = !e.killer && !e.suicide && !e.weaponClass;
+  const worldCause = !noKiller ? null
+    : e.cause ? NO_KILLER[e.cause]
+    : deathCauseFromDamageType(e.damageType);
 
   // World-cause: single sentence row ("X fell to death")
   if (worldCause) {
@@ -90,7 +126,7 @@ function Row({ e, select }: RowProps) {
                   onClick={() => select(e.victim)} />
         <VehicleChip cls={e.victimVehicleClass} />
         <span className="kf-world-phrase" title={worldCause.title}>
-          {deathCausePhrase(e.damageType)}
+          {e.cause ? NO_KILLER[e.cause].phrase : deathCausePhrase(e.damageType)}
         </span>
       </div>
     );
@@ -98,7 +134,8 @@ function Row({ e, select }: RowProps) {
 
   const wLabel = weaponLabel(e);
   return (
-    <div className={rowCls} title={e.wounded ? "Wounded (incap)" : undefined}>
+    <div className={rowCls}
+         title={e.wounded ? "Incapacitated — revivable until they give up or bleed out" : undefined}>
       <span className="kf-time">{time}</span>
       {e.killer
         ? <NameChip name={e.killer} team={e.killerTeam} roleId={e.killerRoleId}
@@ -115,6 +152,7 @@ function Row({ e, select }: RowProps) {
           <span className="kf-dist">{Math.round(e.hitDistance)} m</span>
         )}
         {e.headshot && <span className="kf-hs" title="Headshot">HS</span>}
+        {e.wounded && <span className="kf-incap">INCAP</span>}
         <span className="kf-arrow">›</span>
       </span>
       <NameChip name={e.victim} team={e.victimTeam} roleId={e.victimRoleId}
@@ -126,7 +164,11 @@ function Row({ e, select }: RowProps) {
 
 export function KillFeed() {
   useStaticCatalogs();  // re-render once the weapon catalogs load in
-  const entries = useViewerStore((s) => s.killFeed);
+  const all = useViewerStore((s) => s.killFeed);
+  const incaps = useViewerStore((s) => s.killFeedIncaps);
+  const entries = useMemo(
+    () => (incaps ? all : all.filter((e) => !e.wounded)).slice(0, KILL_FEED_MAX),
+    [all, incaps]);
   const visible = useViewerStore((s) => s.killFeedVisible);
   const toggle  = useViewerStore((s) => s.toggleKillFeed);
   const clear   = useViewerStore((s) => s.clearKillFeed);
@@ -151,18 +193,25 @@ export function KillFeed() {
 
   return (
     <div id="killfeed" className={visible ? "kf-open" : "kf-collapsed"}>
-      <header onClick={toggle} title="Show / hide">
-        <span>Kills</span>
+      <header onClick={toggle} title={visible ? "Hide the kill feed" : "Show the kill feed"}>
+        <span>Kill feed</span>
         <span className="kf-count">{entries.length}</span>
-        <button className="kf-clear" onClick={(e) => { e.stopPropagation(); clear(); }}
-                title="Clear">⨯</button>
+        {visible && entries.length > 0 && (
+          <button className="kf-clear" onClick={(e) => { e.stopPropagation(); clear(); }}
+                  title="Clear the rows shown so far">Clear</button>
+        )}
+        <svg className={"kf-caret" + (visible ? " open" : "")} viewBox="0 0 24 24"
+             width="12" height="12" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2.2"
+                strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </header>
       {visible && (
         <div className="kf-body">
           {entries.length === 0 && (
             <div className="kf-empty">No kills yet</div>
           )}
-          {entries.map((e) => <Row key={e.id} e={e} select={select} />)}
+          {entries.map((e) => <Row key={e.id} e={e} incaps={incaps} select={select} />)}
         </div>
       )}
     </div>

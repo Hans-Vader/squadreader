@@ -101,7 +101,7 @@ def test_flush_backlog_pushes_stats_and_replay(tmp_path, monkeypatch):
     ic.enqueue(backlog, MID)
     res = ic.flush_backlog(backlog, db, rec, creds)
 
-    assert res == {"sent": 1, "pending": 0, "errors": 0}
+    assert res == {"sent": 1, "pending": 0, "errors": 0, "skipped": 0}
     assert calls["match"] == [MID]
     assert calls["replay"] == [(MID, "eu1")]
     assert list(backlog.glob("*.json")) == []          # marker consumed
@@ -153,7 +153,7 @@ def test_stats_only_flush_ignores_replay(tmp_path, monkeypatch):
     monkeypatch.setattr(ic, "push_match", lambda *a, **k: None)
     ic.enqueue(backlog, MID)
     res = ic.flush_backlog(backlog, db, None, creds, push_replay_files=False)
-    assert res == {"sent": 1, "pending": 0, "errors": 0}
+    assert res == {"sent": 1, "pending": 0, "errors": 0, "skipped": 0}
 
 
 def test_next_seq_is_monotonic_and_persistent(tmp_path):

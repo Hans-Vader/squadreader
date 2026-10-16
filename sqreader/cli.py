@@ -707,11 +707,31 @@ def cmd_serve(args: argparse.Namespace) -> int:
             res = ingest_client.flush_backlog(
                 push_backlog, stats_db_path, recordings_dir, push_creds or {},
                 push_replay_files=bool(config.get("push_replay")))
-            if res["sent"] or res["errors"]:
+            if res["sent"] or res["errors"] or res.get("skipped"):
                 print(f"[push] sent={res['sent']} pending={res['pending']} "
-                      f"errors={res['errors']}", file=sys.stderr)
+                      f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+                      file=sys.stderr)
         except Exception as _fe:
             print(f"[push] flush error: {_fe!r}", file=sys.stderr)
+
+    # The flush runs beside the tick loop, never in it. Publishing a replay
+    # takes about a minute per 300 MB, and run inline it froze the loop for
+    # exactly that long: the live map went 70 s stale and the next match's
+    # opening frames went unrecorded. It only stayed hidden while every large
+    # upload failed at once on the proxy's 413. One flush at a time; a tick
+    # that finds one still running just leaves it to finish.
+    import threading as _threading
+    _flush_thread: list[_threading.Thread] = []
+
+    def _flush_running() -> bool:
+        return bool(_flush_thread) and _flush_thread[0].is_alive()
+
+    def _flush_push_soon() -> None:
+        if _flush_running():
+            return
+        t = _threading.Thread(target=_flush_push, name="push-flush", daemon=True)
+        _flush_thread[:] = [t]
+        t.start()
 
     # -- Fleet check-in (Phase 0 remote-update telemetry) -------------------
     # A lightweight sealed report — agent version, the Squad BUILD we're attached
@@ -1033,7 +1053,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     started = time.time()
     last_report = started
     last_flush = started
-    _flush_push()  # drain anything a previous run queued before we start ticking
+    _flush_push_soon()  # drain what a previous run queued, beside the loop
     # First fleet check-in ~60s after boot (like the reference updater), then
     # every CHECKIN_INTERVAL_SEC. Seeding last_checkin in the past makes the first
     # one fire early so a freshly-broken server shows up on the fleet dashboard fast.
@@ -1251,7 +1271,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
             # Central push flush — every ~30s, well off the per-tick hot path.
             if push_active and now - last_flush >= 30.0:
-                _flush_push()
+                _flush_push_soon()
                 last_flush = now
 
             # Persist the placer cache every ~30s so captured placers survive a
@@ -1334,7 +1354,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
             except Exception as _e:
                 print(f"stats finalize error on shutdown: {_e!r}",
                       file=sys.stderr)
-        _flush_push()  # best-effort: push whatever finalized before we exit
+        # Best-effort: push whatever finalized before we exit — unless a flush
+        # is already running beside us on the same queue; whatever it has not
+        # sent stays queued for the next start.
+        if not _flush_running():
+            _flush_push()
         if placer_cache_path is not None:
             _save_placer_cache(caches, placer_cache_path)  # keep placers
         srv.shutdown()
@@ -1432,7 +1456,8 @@ def cmd_stats_backfill(args: argparse.Namespace) -> int:
             push_backlog, stats_db, rec_dir, push_creds,
             push_replay_files=bool(config.get("push_replay")))
         print(f"push: sent={res['sent']} pending={res['pending']} "
-              f"errors={res['errors']}", file=sys.stderr)
+              f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+              file=sys.stderr)
     print(f"backfill complete: {done}/{len(eligible)} matches in "
           f"{time.time() - t0:.0f}s", file=sys.stderr)
     print("note: run `sqreader stats-elo-recalc --stats-db ...` afterwards — "

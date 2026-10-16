@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import platform
 import sqlite3
 import time
@@ -41,10 +42,41 @@ SCHEMA_MANIFEST_REQ = "sqr-manifest-req-1"
 # parses `sqreader-push/<version> (<platform>)`.
 _UA = f"sqreader-push/{__version__} ({platform.system()})"
 _STATS_TABLES = ("matches", "player_matches", "kill_events", "vehicle_session")
+# MUST match central's MAX_REPLAY_BYTES. Checked before anything is read or
+# sent, so a replay central would refuse anyway costs nothing.
+_MAX_REPLAY_BYTES = 2 * 1024 * 1024 * 1024
+# A replay that fails is tried again later, each time later still, and not
+# forever. Up to 1.4.8 the backlog retried every failed replay on every flush,
+# about every 30 s, sending the whole file again each time: an operator whose
+# uploads were being refused watched the same 88 replays go up over and over
+# and lost ~20 TiB of bandwidth before stopping the agent. The wait starts at a
+# minute and grows fourfold to a ceiling of six hours, and the eighth failure
+# retires the replay - about 18 hours in all. A central that is down overnight
+# still gets its replays; a refusal that will never change costs eight uploads.
+# The match's stats are sent separately and are not affected.
+_REPLAY_RETRY_FIRST_SEC = 60
+_REPLAY_RETRY_FACTOR = 4
+_REPLAY_RETRY_MAX_SEC = 6 * 3600
+_REPLAY_MAX_ATTEMPTS = 8
+# How long to keep looking for a recording that has not turned up. A recorder
+# closes its file within seconds of a match ending, so a day without one means
+# it was pruned or never kept, not that we are early.
+_REPLAY_MISSING_MAX_SEC = 24 * 3600
+
+log = logging.getLogger(__name__)
 
 
 class PushError(Exception):
-    """Central unreachable, refused the push, or a bad response."""
+    """Central unreachable, refused the push, or a bad response.
+
+    ``permanent`` marks a refusal that retrying cannot change - a replay over
+    central's size limit, a 413 - so the backlog retires it at once instead of
+    sending the same bytes again later.
+    """
+
+    def __init__(self, *args: object, permanent: bool = False) -> None:
+        super().__init__(*args)
+        self.permanent = permanent
 
 
 # --------------------------------------------------------------------------
@@ -211,9 +243,80 @@ def download_artifact(creds: dict[str, str], file: str, *,
     return _send(req, timeout=timeout)
 
 
+#: A replay above this goes up in parts. The proxy in front of central
+#: (Cloudflare) answers any request body over 100 MiB with its own 413 before
+#: central ever sees it, and a full match recorded at 4 Hz is 250-350 MiB: every
+#: one of those replays was being given up on. Parts keep each request well
+#: under the cap, whatever address central is reached at.
+_REPLAY_CHUNK_THRESHOLD = 90 * 1024 * 1024
+_REPLAY_CHUNK_BYTES = 64 * 1024 * 1024
+
+
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for buf in iter(lambda: f.read(1 << 20), b""):
+            h.update(buf)
+    return h.hexdigest()
+
+
+def _push_replay_parts(creds: dict[str, str], match_id: str, server_id: str,
+                       path: Path, size: int, *, seq: int, timeout: float) -> None:
+    """Publish a replay too large for one request as numbered parts. Central
+    keeps them until all are in and joins them only if the result is exactly
+    `size` bytes with this sha256. Each part is read, sealed and sent on its
+    own, so neither the whole file nor an envelope gone stale is held for the
+    length of the upload; a part that fails is simply sent again next flush.
+
+    The last part's answer is checked, not assumed: central says whether the
+    replay is now whole, and a "still missing parts" answer must not let the
+    backlog retire a replay central does not have."""
+    whole = _file_sha256(path)
+    count = (size + _REPLAY_CHUNK_BYTES - 1) // _REPLAY_CHUNK_BYTES
+    raw = b""
+    with path.open("rb") as f:
+        for index in range(count):
+            part = f.read(_REPLAY_CHUNK_BYTES)
+            manifest = seal_json(
+                {"schema": SCHEMA_REPLAY, "server_id": server_id,
+                 "match_id": match_id, "size": size, "sha256": whole,
+                 "chunk_index": index, "chunk_count": count,
+                 "chunk_size": len(part),
+                 "chunk_sha256": hashlib.sha256(part).hexdigest()},
+                secret=_secret(creds), agent_id=creds["SQREADER_AGENT_ID"],
+                seq=seq)
+            req = urllib.request.Request(
+                _push_base(creds) + "/ingest/replay", data=part, method="POST",
+                headers={"Content-Type": "application/octet-stream",
+                         "X-Sqr-Manifest": json.dumps(manifest,
+                                                      separators=(",", ":")),
+                         "User-Agent": _UA})
+            raw = _send(req, timeout=timeout)
+    try:
+        answer = json.loads(raw or b"{}")
+    except ValueError:
+        answer = {}
+    if isinstance(answer, dict) and answer.get("complete") is False:
+        raise PushError(f"central is still missing {answer.get('missing', '?')} "
+                        f"part(s) of the replay for {match_id}")
+
+
 def push_replay(creds: dict[str, str], match_id: str, server_id: str,
                 sqrx_path: str | Path, *, seq: int, timeout: float = 300.0) -> None:
-    data = Path(sqrx_path).read_bytes()
+    path = Path(sqrx_path)
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise PushError(f"replay unreadable: {exc}") from exc
+    if size > _MAX_REPLAY_BYTES:
+        raise PushError(
+            f"replay too large to publish: {size} bytes > {_MAX_REPLAY_BYTES} "
+            f"({path.name})", permanent=True)
+    if size > _REPLAY_CHUNK_THRESHOLD:
+        _push_replay_parts(creds, match_id, server_id, path, size,
+                           seq=seq, timeout=timeout)
+        return
+    data = path.read_bytes()
     manifest = seal_json(
         {"schema": SCHEMA_REPLAY, "server_id": server_id, "match_id": match_id,
          "size": len(data), "sha256": hashlib.sha256(data).hexdigest()},
@@ -246,11 +349,16 @@ def flush_backlog(backlog_dir: str | Path, db_path: str | Path,
                   push_replay_files: bool = True) -> dict[str, int]:
     """Push every queued match (stats first, then replay once its .sqrx has
     closed). Idempotent; leaves a marker in place on failure to retry later.
-    Returns counts {sent, pending, errors}."""
+
+    A failed replay waits before it is tried again, longer after each failure,
+    and is retired after _REPLAY_MAX_ATTEMPTS or at once on a permanent
+    refusal (see _REPLAY_RETRY_FIRST_SEC). A replay that is waiting, or whose
+    recording has not closed yet, counts as `pending`; one that was retired
+    counts as `skipped`. Returns counts {sent, pending, errors, skipped}."""
     d = Path(backlog_dir)
-    sent = pending = errors = 0
+    sent = pending = errors = skipped = 0
     if not d.is_dir():
-        return {"sent": 0, "pending": 0, "errors": 0}
+        return {"sent": 0, "pending": 0, "errors": 0, "skipped": 0}
     for marker in sorted(d.glob("*.json")):
         try:
             state = json.loads(marker.read_text(encoding="utf-8"))
@@ -271,23 +379,97 @@ def flush_backlog(backlog_dir: str | Path, db_path: str | Path,
                 _atomic_json(marker, state)
 
             if push_replay_files and not state.get("replay_done"):
+                if time.time() < float(state.get("replay_next_at") or 0):
+                    pending += 1              # failed before; its wait is not over
+                    continue
                 sqrx = (_find_replay(recordings_dir, mid)
                         if recordings_dir else None)
-                if sqrx is None:              # .sqrx not closed yet — retry next
-                    pending += 1
+                if sqrx is None:
+                    if not _replay_never_coming(marker, state, mid):
+                        pending += 1          # .sqrx not closed yet — retry next
+                        continue
+                    marker.unlink(missing_ok=True)
+                    skipped += 1
                     continue
-                push_replay(creds, mid, _server_id(db_path, mid),
-                            sqrx, seq=_next_seq(d))
+                try:
+                    push_replay(creds, mid, _server_id(db_path, mid),
+                                sqrx, seq=_next_seq(d))
+                except PushError as exc:
+                    if not _replay_failed(marker, state, mid, exc):
+                        raise                 # counted below; waits, then retries
+                    marker.unlink(missing_ok=True)
+                    skipped += 1
+                    continue
                 state["replay_done"] = True
                 _atomic_json(marker, state)
 
             marker.unlink(missing_ok=True)
             sent += 1
-        except PushError:
+        except PushError as exc:
             errors += 1                        # central down/refused — keep marker
-        except (EnvelopeError, OSError, sqlite3.Error):
+            log.warning("push failed for match %s: %s", mid, exc)
+        except (EnvelopeError, OSError, sqlite3.Error) as exc:
             errors += 1
-    return {"sent": sent, "pending": pending, "errors": errors}
+            log.warning("push failed for match %s: %r", mid, exc)
+    return {"sent": sent, "pending": pending, "errors": errors,
+            "skipped": skipped}
+
+
+def _replay_retry_delay(attempts: int) -> float:
+    """Seconds to wait after the `attempts`-th failure of a replay."""
+    return float(min(_REPLAY_RETRY_MAX_SEC,
+                     _REPLAY_RETRY_FIRST_SEC
+                     * _REPLAY_RETRY_FACTOR ** max(0, attempts - 1)))
+
+
+def _replay_failed(marker: Path, state: dict[str, Any], match_id: str,
+                   exc: PushError) -> bool:
+    """Record a failed replay push. True once the replay is retired.
+
+    Otherwise the marker carries when to try again, and the flush leaves it
+    alone until then: a central that is down or refusing sees each replay a
+    handful of times over a day instead of every half minute."""
+    attempts = int(state.get("replay_attempts") or 0) + 1
+    state["replay_attempts"] = attempts
+    if exc.permanent or attempts >= _REPLAY_MAX_ATTEMPTS:
+        state["replay_done"] = True
+        state["replay_skipped"] = str(exc)
+        _atomic_json(marker, state)
+        log.error("giving up on the replay for match %s after %d attempt(s): %s"
+                  " - its stats are published, the replay is not",
+                  match_id, attempts, exc)
+        return True
+    wait = _replay_retry_delay(attempts)
+    state["replay_next_at"] = time.time() + wait
+    _atomic_json(marker, state)
+    log.warning("replay push failed for match %s (attempt %d/%d), next try in "
+                "%.0f min: %s", match_id, attempts, _REPLAY_MAX_ATTEMPTS,
+                wait / 60, exc)
+    return False
+
+
+def _replay_never_coming(marker: Path, state: dict[str, Any],
+                         match_id: str) -> bool:
+    """Whether to stop waiting for a recording that has not turned up.
+
+    A match whose .sqrx was pruned, or never kept, leaves a marker nothing will
+    ever satisfy, and it would read as `pending` on every flush for good. Timed
+    from when the file was first seen missing, not from when the match ended:
+    an agent that was off for two days comes back to recordings that are still
+    there, and dating the wait from the match would drop them on the first
+    flush after it woke up."""
+    now = time.time()
+    since = state.get("replay_missing_since")
+    if not isinstance(since, (int, float)):
+        state["replay_missing_since"] = now
+        _atomic_json(marker, state)
+        return False
+    if now - since < _REPLAY_MISSING_MAX_SEC:
+        return False
+    log.error("no recording for match %s after %.0f h of looking - retiring it;"
+              " its stats are published, the replay is not",
+              match_id, (now - since) / 3600)
+    return True
 
 
 def _server_id(db_path: str | Path, match_id: str) -> str:
@@ -410,7 +592,10 @@ def _send(req: urllib.request.Request, *, timeout: float) -> bytes:
             if 500 <= exc.code < 600 and attempt < max_retries:
                 time.sleep(_RETRY_BACKOFFS[attempt])
                 continue
-            raise PushError(f"central HTTP {exc.code}") from exc
+            # 413 is a verdict on the payload, not a hiccup: the agent would
+            # build the identical request again on every later try.
+            raise PushError(f"central HTTP {exc.code}",
+                            permanent=exc.code == 413) from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             if attempt < max_retries:
                 time.sleep(_RETRY_BACKOFFS[attempt])

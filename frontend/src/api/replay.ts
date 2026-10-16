@@ -25,10 +25,13 @@ import { useViewerStore } from "../state/viewerStore";
 import {
   replayLoad, REPLAY_PREBUFFER_MS, REPLAY_PREBUFFER_MIN_FRAMES,
 } from "../state/replayLoad";
-import { createDiffState, diffSnapshot } from "../killfeed/diff";
+import { createDiffState, diffSnapshot, flushPendingDeaths } from "../killfeed/diff";
 import {
   createMarkerState, extendMarkers, findDuplicate, type ReplayMarker,
 } from "../state/replayMarkers";
+import {
+  createRallyState, extendRallies, publishRallies,
+} from "../state/rallyBurns";
 import type { KillFeedEntry, Snapshot } from "../state/types";
 
 /** First frame at or after `ms`, by binary search. */
@@ -55,6 +58,7 @@ export function useReplayLoader() {
   const setReplayTiming = useViewerStore((s) => s.setReplayTiming);
   const finishReplayLoad = useViewerStore((s) => s.finishReplayLoad);
   const addReplayMarkers = useViewerStore((s) => s.addReplayMarkers);
+  const setRallyRecords = useViewerStore((s) => s.setRallyRecords);
 
   useEffect(() => {
     // Drop frames when leaving replay mode — keeps the heap free.
@@ -108,12 +112,31 @@ export function useReplayLoader() {
         ?? findDuplicate(fresh, m)
         ?? (fresh.push(m), m);
 
-    const extendKills = (frames: Snapshot[]) => {
+    // Rally sieges and burns, same chunks. What an earlier window of this match
+    // already found is kept; a rally this window sees again is replaced by the
+    // fresh record, which has watched it from its own first frame.
+    const rstate = createRallyState();
+    const priorRallies = useViewerStore.getState().rallyRecords;
+    const extendRallyRecords = (frames: Snapshot[]) => {
+      if (!extendRallies(rstate, frames)) return;
+      const records = publishRallies(rstate);
+      const seen = new Set(records.map((r) => r.id));
+      setRallyRecords([...priorRallies.filter((r) => !seen.has(r.id)), ...records]);
+    };
+
+    const extendKills = (frames: Snapshot[], final: boolean) => {
       for (let i = diffedUpTo; i < frames.length; i++) {
         const res = diffSnapshot(dstate, frames[i]!);
         for (const e of res.newEntries) timeline.push({ ...e, frameIdx: i });
       }
       diffedUpTo = frames.length;
+      // A death in the last seconds may still be waiting for a late event that
+      // will now never come; settle it on the last frame.
+      if (final && frames.length) {
+        const last = frames.length - 1;
+        for (const e of flushPendingDeaths(dstate, frames[last]!))
+          timeline.push({ ...e, frameIdx: last });
+      }
     };
 
     const spans = (frames: Snapshot[]) => {
@@ -126,9 +149,10 @@ export function useReplayLoader() {
       if (cancelled || !frames.length) return;
       // Kills first, so a frame and the kills it carries become visible in the
       // same store update — never a frame whose kill row arrives a tick later.
-      extendKills(frames);
+      extendKills(frames, final);
       extendMarkers(mstate, frames, sink);
       if (fresh.length) { addReplayMarkers(fresh); fresh = []; }
+      extendRallyRecords(frames);
       replayLoad.loaded = frames.length;
       replayLoad.bufferedMs = spans(frames);
 
@@ -203,5 +227,5 @@ export function useReplayLoader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, id, loadNonce, setReplay, ingestLive, setStatus,
       setReplayKillTimeline, appendReplayFrames, setReplayTiming,
-      finishReplayLoad, addReplayMarkers]);
+      finishReplayLoad, addReplayMarkers, setRallyRecords]);
 }

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math as _math
 import os
+import re
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -67,6 +68,18 @@ def _read_fname(pm: ProcessMemory, addr: int,
         return None
     cmp_idx, number = struct.unpack("<II", raw)
     return alloc.fname_to_str(cmp_idx, number)
+
+
+# An identifier FName (a role id, a vehicle class): letters, digits, "_", "-"
+# and ".". A garbage FName index can land inside another pool entry and decode
+# its plain ASCII as UTF-16, which comes out as a run of CJK-looking characters
+# hundreds long (b0db7147: a role id of 396 such characters, really the bytes
+# of "ObjectProperty", "NameProperty", ...). Nothing that shape is an id.
+_IDENT_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+def _ident_or_none(name: str | None) -> str | None:
+    return name if name and _IDENT_RE.match(name) else None
 
 
 def _uobject_name(pm: ProcessMemory, addr: int,
@@ -1911,7 +1924,7 @@ def read_vehicle_spawner(pm: ProcessMemory, alloc: FNameEntryAllocator,
     cached = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["CachedSpecificVehicle"]))
     if cached:
-        out["vehicleClass"] = _uobject_name(pm, cached, alloc)
+        out["vehicleClass"] = _ident_or_none(_uobject_name(pm, cached, alloc))
         out["vehicleClassAddr"] = f"{cached:#x}"
     ta = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["TeamAuthority"]))
@@ -2791,7 +2804,11 @@ def read_root_pos_yaw(pm: ProcessMemory, actor_addr: int,
         root + paths.scene_attach_parent_off))
     out["attached"] = bool(attach_parent)
     v = read_fvector(pm, root + paths.scene_component_to_world_translation_off)
-    if v is not None:
+    # x and y exactly 0.0 is a transform nobody has set, not a place: b0db7147
+    # recorded an emplaced ZU-23 base at (0, 0, 0) for the whole match, drawn
+    # in the middle of Fallujah. Nothing that moved through the world lands
+    # on it; z is ignored because a garbage transform can hold a denormal.
+    if v is not None and not (v.x == 0.0 and v.y == 0.0):
         out["position"] = {"x": v.x, "y": v.y, "z": v.z}
     yaw = _world_yaw(pm, root, paths)
     if yaw is not None:
@@ -2901,7 +2918,8 @@ def read_player(pm: ProcessMemory, alloc: FNameEntryAllocator,
     if "TeamId" in o:
         out["teamId"] = _safe(lambda: pm.read_i32(ps_addr + o["TeamId"]))
     if "CurrentRoleId" in o:
-        out["roleId"] = _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc)
+        out["roleId"] = _ident_or_none(
+            _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc))
 
     # Stats / network
     if "Score" in o:
@@ -3409,6 +3427,57 @@ def _player_rank(p: dict[str, Any]) -> tuple:
     )
 
 
+def plausible_player(p: dict[str, Any]) -> bool:
+    """Whether a row read as a SQPlayerState can be one at all.
+
+    On a map change the object walk can still hold an address whose memory is
+    no longer a player state. Read as one it gives a nonsense row: an empty id,
+    a name of stray characters, a soldier "attached" at the world origin, and a
+    team number in the millions (b0db7147's first frame: team 21159352). The
+    viewer drew that row as a passenger of the nearest vehicle to the origin.
+    A real player is in team 1 or 2, or 0 / -1 while still joining.
+    """
+    team = p.get("teamId")
+    return team is None or -1 <= team <= 2
+
+
+def _at_origin(pos: Any) -> bool:
+    # x and y both exactly 0.0; z is ignored, since a garbage transform can
+    # carry a denormal there (b0db7147's spawner: z = 6.9e-310).
+    return isinstance(pos, dict) and pos.get("x") == 0 and pos.get("y") == 0
+
+
+def _named(cls: Any) -> bool:
+    return bool(_ident_or_none(cls)) and cls != "None"
+
+
+def drop_phantom_entities(markers: list[dict[str, Any]],
+                          projectiles: list[dict[str, Any]],
+                          *placed: list[dict[str, Any]],
+                          ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Leave out what a map change leaves behind in the other lists too.
+
+    b0db7147's first frame also had seven markers of type "None" with squads
+    such as 5017313 and owners like 0xf, and projectiles of class "None" with
+    damage 4e-44; the viewer drew them at the world origin. Over two full
+    recordings (137k markers, 26k projectiles) every real marker has a
+    BP_MapMarker_* type and every real projectile a class, so those are the
+    test. A squad is a small number. For the remaining lists (`placed`), a
+    position with x and y exactly 0 is a transform nobody set, such as the
+    ammo-crate templates (*_GEN_VARIABLE_*) present in every frame, and is
+    removed so nothing draws there.
+    """
+    markers = [m for m in markers if _named(m.get("type"))
+               and not (isinstance(m.get("squad"), int)
+                        and not 0 <= m["squad"] <= 100)]
+    projectiles = [p for p in projectiles if _named(p.get("classShort"))]
+    for rows in (markers, projectiles, *placed):
+        for r in rows:
+            if _at_origin(r.get("position")):
+                del r["position"]
+    return markers, projectiles
+
+
 def dedupe_players(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One row per player.
 
@@ -3910,8 +3979,9 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
         profiling.STATS.walk_visits = walk_visits
         profiling.STATS.walk_full = walk_full
 
-    players = [read_player(pm, alloc, arr, paths, addr, caches=caches)
-               for addr in players_raw]
+    players = [p for p in (read_player(pm, alloc, arr, paths, addr, caches=caches)
+                           for addr in players_raw)
+               if plausible_player(p)]
 
     # Squad's per-player stats collectors (memory-only counters not in RCON):
     # read each singleton once, then splice its per-player entry into the
@@ -4325,6 +4395,8 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
     if game_state and not include_motd:
         game_state.pop("motd", None)
 
+    markers, projectiles = drop_phantom_entities(
+        markers, projectiles, deployables, vehicle_spawners, rally_points)
     _snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "server": server_id,

@@ -367,8 +367,17 @@ interface Store {
   resetView(): void;
 }
 
+/** The mode the page was opened for. A replay link starts in replay mode, so
+ *  the Home page, and the recording list and leaderboard it fetches, never
+ *  mount for the one render before App's boot effect would switch over. */
+function initialMode(): Mode {
+  if (typeof window === "undefined") return "home";
+  return new URLSearchParams(window.location.search).get("mode") === "replay"
+    ? "replay" : "home";
+}
+
 export const useViewerStore = create<Store>((set) => ({
-  mode: "home",
+  mode: initialMode(),
   status: "connecting",
   canLive: false,
   prevSnap: null,

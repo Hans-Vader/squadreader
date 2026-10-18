@@ -16,10 +16,10 @@ const proxyPath = {
 };
 
 export default defineConfig(({ mode }) => ({
-  // The central build (`npm run build:apple`). Its theme switch used to live
-  // only in a git-ignored .env.apple, so a build from a fresh checkout came out
-  // unthemed — and squadreader.com/stats, which keys on this flag, rendered the
-  // agent's landing page instead of the stats page. The mode carries it now.
+  // The central build (`npm run build:apple`): the replay viewer squadreader.com
+  // serves at /replay. Its theme switch used to live only in a git-ignored
+  // .env.apple, so a build from a fresh checkout came out unthemed. The mode
+  // carries it now.
   define: mode === "apple"
     ? { "import.meta.env.VITE_THEME": JSON.stringify("apple") }
     : {},

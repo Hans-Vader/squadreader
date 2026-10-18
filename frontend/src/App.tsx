@@ -168,19 +168,9 @@ export default function App() {
   }, [setSelectedVehicleId, setSelectedPlayerKey, setSelectedInfo,
       setScoreboardVisible, toggleScoreboard, toggleTimeline, setTimelineVisible]);
 
-  // squadreader.com /stats: the rich stats view IS the page (a site-themed
-  // full-page render), not the agent's command-panel landing. Everywhere else
-  // (altaisquad, /replay) keeps the Home landing + the stats <dialog>.
-  const statsRoute = import.meta.env.VITE_THEME === "apple" &&
-    window.location.pathname.startsWith("/stats");
-
   return (
     <div id="root-grid">
-      {statsRoute ? (
-        // The /stats route is always the stats page — never the map — even if a
-        // stray ?mode=replay|live is in the URL.
-        <PlayerStats inline />
-      ) : mode === "home" ? (
+      {mode === "home" ? (
         <Home />
       ) : (
         <div id="stage">
@@ -200,14 +190,14 @@ export default function App() {
         </div>
       )}
       {/* Dialogs/overlays stay mounted OUTSIDE the mode branch so Home can
-          openModal() them (İstatistik / Kayıtlar) and they persist across modes.
-          The stats <dialog> is skipped on /stats, where <PlayerStats inline/>
-          above already renders the same view as the page (one id per document). */}
+          openModal() them (Stats / Recordings) and they persist across modes.
+          The stats <dialog> is the agent's own: squadreader.com has /stats
+          pages of its own and never shows Home, so its build leaves it out. */}
       <Scoreboard />
       <TicketTimeline />
       <RecordingPicker />
-      {!statsRoute && <PlayerStats />}
-      {!statsRoute && <LiveAccess />}
+      {import.meta.env.VITE_THEME !== "apple" && <PlayerStats />}
+      <LiveAccess />
     </div>
   );
 }

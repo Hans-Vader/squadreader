@@ -1687,6 +1687,9 @@ html, body, #root {
   cursor: pointer;
   transition: background .12s, opacity .12s;
 }
+/* Same caret as the kill feed's: down while open, flipped up once folded. */
+#timeline-bar .tb-fold svg { transform: rotate(180deg); transition: transform .15s; }
+#timeline-bar .tb-fold.open svg { transform: none; }
 #timeline-bar .tb-icon:hover { opacity: 1; background: color-mix(in srgb, var(--ink) 9%, transparent); }
 #timeline-bar .tb-icon:active { background: color-mix(in srgb, var(--ink) 15%, transparent); }
 #timeline-bar .tb-icon:focus-visible,
@@ -2787,14 +2790,6 @@ html, body, #root {
 }
 #player-stats .ps-period option { background: var(--panel); color: var(--ink); }
 
-/* ---- server scope selector (sits in the header) ---- */
-#player-stats .ps-server {
-  background: var(--surface-2); border: 1px solid var(--glass-brd); color: var(--ink);
-  border-radius: var(--radius-chip); padding: 6px 12px;
-  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
-}
-#player-stats .ps-server option { background: var(--panel); color: var(--ink); }
-
 /* ---- ELO tier badge ----
    --elo is the tier colour, handed over by the server (sqreader/elo.py) so the
    bands cannot drift between the two sides. Text stays in ink tokens: the dot
@@ -2884,7 +2879,6 @@ html, body, #root {
 /* ---- heatmap ---- */
 #player-stats .hm-tab { padding: 8px 16px 16px; }
 #player-stats .hm-controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-#player-stats .hm-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 #player-stats .hm-controls .ps-period { margin-left: 0; }
 #player-stats .hm-wrap { position: relative; }
 #player-stats .hm-canvas {
@@ -2972,6 +2966,7 @@ html, body, #root {
 #home .hm-cta { display: flex; gap: 10px; flex-wrap: wrap; }
 
 #home .hm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+#home .hm-cols.is-single { grid-template-columns: 1fr; }
 #home .hm-panel { padding: 0; overflow: hidden; }
 #home .hm-panel-h { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--border); }
 #home .hm-panel-h h2 { margin: 0; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-mute); }
@@ -2999,6 +2994,8 @@ html, body, #root {
 #home .hm-pval-k { font-size: 10px; color: var(--ink-mute); font-weight: 500; }
 
 #home .hm-foot { margin-top: 30px; text-align: center; font-size: 12px; color: var(--ink-faint); }
+#home .hm-gh { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+#home .hm-gh:hover { color: var(--ink); }
 
 @media (max-width: 720px) { #home .hm-cols { grid-template-columns: 1fr; } }
 

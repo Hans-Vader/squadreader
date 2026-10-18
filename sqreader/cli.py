@@ -744,14 +744,22 @@ def cmd_serve(args: argparse.Namespace) -> int:
     _checkin_restarts = (fleet.bump_restarts(stats_db_path.parent)
                          if push_active and stats_db_path is not None else 0)
 
-    def _checkin() -> None:
+    def _checkin(*, with_health: bool = True) -> None:
         if not push_active or push_creds is None or push_backlog is None:
             return
         try:
+            # `snap` is the newest FULL frame (both tiers keep it current) and
+            # `record_state_box["current"]` is the open .sqrx, if any — so the
+            # live block describes the same match the recorder is writing.
             telem = fleet.gather(pm, arr, alloc, build_sha=_checkin_build_sha,
                                  restarts=_checkin_restarts,
                                  uptime_sec=time.time() - started,
-                                 channel=_checkin_channel)
+                                 channel=_checkin_channel,
+                                 live=fleet.live_match(
+                                     snap,
+                                     recording=record_state_box.get(
+                                         "current") is not None),
+                                 with_health=with_health)
             ingest_client.checkin(
                 push_creds, telem, seq=ingest_client._next_seq(push_backlog))
         except Exception as _ce:
@@ -1058,6 +1066,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     # every CHECKIN_INTERVAL_SEC. Seeding last_checkin in the past makes the first
     # one fire early so a freshly-broken server shows up on the fleet dashboard fast.
     last_checkin = started - (fleet.CHECKIN_INTERVAL_SEC - 60.0)
+    # Live block rides its own faster timer; see fleet.LIVE_INTERVAL_SEC.
+    last_live = started - fleet.LIVE_INTERVAL_SEC
     # Per-match recorder state. Lives across ticks; the recorder module's
     # `_handle_snap` opens/closes .sqrx files as matchId / matchState
     # change. Stays empty when recordings_dir is None.
@@ -1280,12 +1290,22 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 _save_placer_cache(caches, placer_cache_path)
                 last_placer_save = now
 
-            # Fleet check-in every ~5 min (first ~60s post-boot), then an offset
-            # self-heal attempt on the same cadence. Off the hot path; both are
-            # best-effort. A successful self-heal rebinds `paths` for later ticks
-            # (and hands them to the build worker in two-tier mode).
-            if push_active and now - last_checkin >= fleet.CHECKIN_INTERVAL_SEC:
-                _checkin()
+            # Every minute a LIGHT check-in carrying the match being played now
+            # (central's "Playing now"); every fifth one is the FULL check-in
+            # (health + Squad build), and only that one goes on to the offset
+            # self-heal and the update check, so the expensive work keeps its
+            # 5-minute cadence (first ~60s post-boot). All of it is off the hot
+            # path and best-effort. A successful self-heal rebinds `paths` for
+            # later ticks (and hands them to the build worker in two-tier mode).
+            full = False
+            if push_active and now - last_live >= fleet.LIVE_INTERVAL_SEC:
+                # Decided once, here: the full check-in only ever goes out on a
+                # live tick, so the health report can never be skipped by the
+                # 5-minute work below running on a tick of its own.
+                full = now - last_checkin >= fleet.CHECKIN_INTERVAL_SEC
+                _checkin(with_health=full)
+                last_live = now
+            if full:
                 _healed = _selfheal()
                 if _healed is not None:
                     paths = _healed

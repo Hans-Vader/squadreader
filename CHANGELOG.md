@@ -25,6 +25,52 @@ follows [Semantic Versioning](https://semver.org/).
   checks that `frontend/dist/index.html` ships no inline script, so adding one
   fails the test instead of being silently blocked by the CSP.
 
+## [1.4.10] - 2026-10-18
+
+### Added
+- The agent tells central about the match being played right now: map, mode,
+  elapsed time, players, factions, tickets, and whether a replay is being
+  written. squadreader.com showed "Playing now" for one server only, because
+  this was never part of the agent everyone installs. It rides a light
+  check-in every minute; the full one with health and the Squad build stays
+  on five minutes, so the cost per hour does not change.
+- `leaderboard_public: false` hides the leaderboards: `/api/leaderboard`
+  answers 404, the Stats dialog drops its leaderboard tabs and Home its Top
+  Players panel. Profiles, search, weapons, match lists and heatmaps stay
+  public, and an enrolled agent still sends its matches to central, which
+  ranks them on its own boards (#11, r4b2).
+- The replay timeline folds down to its seek bar and controls with a caret
+  beside them, so the moments above the track stop covering the map (#12,
+  r4b2).
+- The home footer links to the GitHub repository (#13, r4b2).
+
+### Fixed
+- On a map change the reader could read memory that no longer held what it
+  had held a moment before, and wrote it down: player rows with empty ids,
+  names of stray characters and teams in the millions, markers of type "None"
+  with squads such as 5017313, nameless projectiles, and a vehicle sitting at
+  exactly (0, 0, 0). The viewer drew them as a ZU-23 in the middle of Fallujah
+  with a passenger whose name filled the tooltip. Those rows are left out now,
+  role ids and vehicle classes must look like identifiers, and a position at
+  exactly x = 0, y = 0 counts as no position. The viewer cleans the same rows
+  out of recordings made before this release.
+- Fast-forwarding a dense recording could grow the tab to 2.4 GB and end on
+  Chrome's out-of-memory page: every `ctx.save()` cost 772 bytes of Blink
+  heap, a few hundred times a frame. The map keeps that state itself now.
+- A recording with no layer block and one garbage coordinate (x ~ 5e151)
+  framed the map so wide that drawing the grid never finished (#9, r4b2).
+- The Docker image served the viewer as last committed, months old; it now
+  builds the frontend itself (#10, r4b2).
+- A replay link mounted the home page for one render first, which fetched
+  the recording list and the leaderboard for a page nobody saw. It opens
+  straight into the replay now.
+
+### Removed
+- The viewer's squadreader.com stats mode: `/stats` in the `build:apple`
+  bundle, `theme-site.css`, its server picker and the FOB/HAB heatmap kinds.
+  squadreader.com serves /stats as pages of its own now. The agent's own Stats
+  dialog, its Top Players panel and `leaderboard_public` are unchanged.
+
 ## [1.4.9] - 2026-10-11
 
 ### Added

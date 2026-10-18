@@ -48,7 +48,7 @@ import pytest
 # broken suite rather than a missing tool.
 pytestmark = pytest.mark.skipif(
     shutil.which("docker") is None,
-    reason="needs a Docker daemon (README: Run in Docker > Testing this setup)")
+    reason="needs a Docker daemon (README: In Docker > Testing this setup)")
 
 REPO = Path(__file__).resolve().parents[2]
 BASE = REPO / "docker-compose.yml"

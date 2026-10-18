@@ -1,15 +1,17 @@
-// Full-screen player-statistics dashboard (a <dialog>). Opened from the TopBar
-// "İstatistik" button. Landing = leaderboards (tabs by stat) + a search box;
+// The agent's player-statistics dashboard (a <dialog>), opened from the Home
+// page's Stats buttons. Landing = leaderboards (tabs by stat) + a search box;
 // clicking any player opens their profile (lifetime totals + recent matches +
-// top weapons + nemesis/victims + favorite maps). All data from the backend
-// /api/leaderboard, /api/players, /api/players/<eos>. Turkish UI; Squad game
-// terms (kill / revive / RAAS / faction names) stay English.
+// top weapons + nemesis/victims + favorite maps). All data from the agent's own
+// /api/leaderboard, /api/players, /api/players/<eos>.
+//
+// squadreader.com does not use this: its /stats is a plain page of the site's
+// own (central web/stats.html, web/player.html) over the same API shapes.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   searchPlayers, fetchProfile, fetchLeaderboard, fetchWeaponMeta,
   fetchLayerHeatmap, fetchHeatmapLayers, fetchMatches, fetchMatchDetail,
-  fetchMatchHeatmap, fetchServers,
+  fetchMatchHeatmap,
 } from "../api/playerStats";
 import { HeatmapCanvas } from "./HeatmapCanvas";
 import { vehicleDisplayName } from "../data/vehicleDisplayNames";
@@ -17,9 +19,8 @@ import { fmtInt } from "../format";
 import type {
   LeaderRow, PlayerProfile, PlayerSummary, WeaponStat, NemesisRow,
   PlayerMatchRow, StatsPeriod, WeaponMetaRow, LayerHeatmap, EloBadge,
-  HeatmapLayerOption, HeatmapKind, SquadmateRow, VehicleUsedRow, MapRecord, FactionRecord,
+  HeatmapLayerOption, SquadmateRow, VehicleUsedRow, MapRecord, FactionRecord,
   ActivityCell, MatchSummaryRow, MatchDetail, MatchDetailPlayer, MatchHeatmap,
-  ServerOption,
 } from "../state/types";
 
 const vehicleName = (cls: string | null) =>
@@ -51,14 +52,7 @@ function humanWeapon(cls: string): string {
   return cls.replace(/^BP_/, "").replace(/_C$/, "").replace(/_/g, " ").trim() || cls;
 }
 
-// squadreader.com (the `build:apple` build) vs an operator's own box (the plain
-// build). The central site has a dedicated replay browser at /replays, so the
-// match list is removed from this page there — it was the 11th of 13 tabs,
-// which is most of why finding a replay was hard. An operator's local UI has no
-// such page, so it keeps every tab.
-const IS_CENTRAL = import.meta.env.VITE_THEME === "apple";
-
-const ALL_TABS: { key: string; label: string }[] = [
+const TABS: { key: string; label: string }[] = [
   { key: "elo", label: "ELO" },
   { key: "kills", label: "Kills" },
   { key: "kd", label: "K/D" },
@@ -81,10 +75,6 @@ const ALL_TABS: { key: string; label: string }[] = [
   { key: "weapons", label: "Weapons" },
   { key: "heatmap", label: "Heatmap" },
 ];
-// What this page actually offers. On central the match list lives at /replays.
-const TABS = IS_CENTRAL
-  ? ALL_TABS.filter((t) => t.key !== "matchlist")
-  : ALL_TABS;
 // ELO is a running total, not a sum over matches — there is no such thing as
 // "this week's ELO". Weapons, matchlist and the heatmap are their own views,
 // not player leaderboards. ("matches" = the by-match-count leaderboard;
@@ -97,35 +87,8 @@ const PERIODLESS = new Set(["elo"]);
 // Where the dialog lands when the operator set leaderboard_public: false.
 const FIRST_NON_LEADER_TAB = TABS.find((t) => !LEADER_TABS.has(t.key))!.key;
 
-/** What the heatmap can count. Placements exist only on central, which reads
- *  them out of each stored replay; the agent's own stats API has deaths only. */
-const HEAT_KINDS: { key: HeatmapKind; label: string }[] = [
-  { key: "deaths", label: "Deaths" },
-  { key: "fob", label: "FOB radios" },
-  { key: "hab", label: "HABs" },
-  { key: "fobhab", label: "FOB + HAB" },
-];
-/** Placement cells are coarser than death cells: a layer sees a few dozen
- *  radios, not thousands of deaths, and at 50 m they never pile up. */
-const PLACEMENT_CELL_CM = 10000;
+/** Heatmap cells are 50 m across. */
 const DEATH_CELL_CM = 5000;
-
-function initialHeatKind(inline: boolean): HeatmapKind {
-  if (!inline || !IS_CENTRAL) return "deaths";
-  const k = new URLSearchParams(window.location.search).get("heat");
-  return HEAT_KINDS.some((x) => x.key === k) ? (k as HeatmapKind) : "deaths";
-}
-
-/** The player a /stats link was opened for: `?player=<eos>`, or the older
- *  `#/players/<eos>` the server page linked with — which nothing ever read, so
- *  every click landed on the leaderboards instead of the player. */
-function linkedPlayer(): string {
-  const p = new URLSearchParams(window.location.search).get("player");
-  if (p) return p;
-  const m = /^#\/players\/([^/?#]+)/.exec(window.location.hash);
-  if (!m) return "";
-  try { return decodeURIComponent(m[1]); } catch { return ""; }
-}
 
 const PERIODS: { key: StatsPeriod; label: string }[] = [
   { key: "daily", label: "Today" },
@@ -173,37 +136,21 @@ const Name = ({ name, clan }: { name: string | null; clan?: string | null }) => 
   </span>
 );
 
-export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
+export function PlayerStats() {
   const dlgRef = useRef<HTMLDialogElement | null>(null);
-  // Inline (/stats) can be deep-linked from the /servers cards: ?server=<id>
-  // pre-scopes the whole view, ?tab=<key> opens a specific board.
-  const [tab, setTab] = useState(() => {
-    if (!inline) return "elo";
-    const t = new URLSearchParams(window.location.search).get("tab");
-    return t && TABS.some((x) => x.key === t) ? t : "elo";
-  });
+  const [tab, setTab] = useState("elo");
   const [period, setPeriod] = useState<StatsPeriod>("alltime");
-  // The site's search box has always navigated here as /stats/?q=<name>, and
-  // this component only ever read `tab` and `server` — so the query was dropped
-  // on the floor and the visitor landed on an empty search field.
-  const [server, setServer] = useState(() =>
-    inline ? new URLSearchParams(window.location.search).get("server") || "" : "");
-  const [servers, setServers] = useState<ServerOption[]>([]);
   const tabRef = useRef(tab); tabRef.current = tab;
   const periodRef = useRef(period); periodRef.current = period;
-  const serverRef = useRef(server); serverRef.current = server;
   const [leaders, setLeaders] = useState<LeaderRow[] | null>(null);
   const [weapons, setWeapons] = useState<WeaponMetaRow[] | null>(null);
   const [heat, setHeat] = useState<LayerHeatmap | null>(null);
   const [layer, setLayer] = useState("");
-  const [heatKind, setHeatKind] = useState<HeatmapKind>(() => initialHeatKind(inline));
-  const heatKindRef = useRef(heatKind); heatKindRef.current = heatKind;
-  // Switching kind or layer can put two heatmap requests in flight; only the
-  // newest one may land.
+  // Switching layer can put two heatmap requests in flight; only the newest
+  // one may land.
   const heatSeq = useRef(0);
   const [ldLoading, setLdLoading] = useState(false);
-  const [q, setQ] = useState(() =>
-    inline ? new URLSearchParams(window.location.search).get("q") || "" : "");
+  const [q, setQ] = useState("");
   const [results, setResults] = useState<PlayerSummary[] | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [pfLoading, setPfLoading] = useState(false);
@@ -215,29 +162,26 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
 
   // One loader for all the tab kinds: they share the loading flag and the
   // error slot, and only one of them is ever on screen.
-  const loadTab = useCallback((t: string, p: StatsPeriod, lyr: string,
-                               sv: string) => {
+  const loadTab = useCallback((t: string, p: StatsPeriod, lyr: string) => {
     setLdLoading(true); setErr(null);
     const fail = (e: unknown) => setErr(String(e));
     const done = () => setLdLoading(false);
     if (t === "weapons") {
-      fetchWeaponMeta(p, 40, sv).then(setWeapons).catch(fail).finally(done);
+      fetchWeaponMeta(p, 40).then(setWeapons).catch(fail).finally(done);
     } else if (t === "heatmap") {
       const seq = ++heatSeq.current;
       if (!lyr) { setHeat(null); done(); return; }
-      const hk = heatKindRef.current;
-      fetchLayerHeatmap(lyr, p, hk === "deaths" ? DEATH_CELL_CM : PLACEMENT_CELL_CM,
-                        sv, hk)
+      fetchLayerHeatmap(lyr, p, DEATH_CELL_CM)
         .then((h) => { if (seq === heatSeq.current) setHeat(h); })
         .catch(fail).finally(done);
     } else if (t === "matchlist") {
-      fetchMatches(p, 60, sv).then(setMatches).catch(fail).finally(done);
+      fetchMatches(p, 60).then(setMatches).catch(fail).finally(done);
     } else {
-      fetchLeaderboard(t, 50, p, sv).then((r) => { setLeaders(r); done(); }, (e) => {
+      fetchLeaderboard(t, 50, p).then((r) => { setLeaders(r); done(); }, (e) => {
         if (String(e?.message) !== "HTTP 404") { fail(e); done(); return; }
         setLbHidden(true);
         setTab(FIRST_NON_LEADER_TAB);
-        loadTab(FIRST_NON_LEADER_TAB, p, lyr, sv);
+        loadTab(FIRST_NON_LEADER_TAB, p, lyr);
       });
     }
   }, []);
@@ -249,38 +193,26 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
     const onOpen = () => {
       setProfile(null); setMatchDetail(null);
       setQ(""); setResults(null); setErr(null);
-      loadTab(tabRef.current, periodRef.current, "", serverRef.current);
+      loadTab(tabRef.current, periodRef.current, "");
     };
     const obs = new MutationObserver(() => { if (dlg.open) onOpen(); });
     obs.observe(dlg, { attributes: true, attributeFilter: ["open"] });
     return () => obs.disconnect();
   }, [loadTab]);
 
-  // Inline (the squadreader.com /stats page) has no dialog to observe for an
-  // "open" event, so kick off the first load on mount instead — and fetch the
-  // enrolled servers for the scope picker (central only; harmless if empty).
-  useEffect(() => {
-    if (!inline) return;
-    loadTab(tabRef.current, periodRef.current, "", serverRef.current);
-    fetchServers().then(setServers).catch(() => setServers([]));
-    const eos = linkedPlayer();
-    if (eos) openProfile(eos, serverRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inline]);
-
-  // Debounced search (re-runs when the server scope changes too).
+  // Debounced search.
   useEffect(() => {
     const query = q.trim();
     if (!query) { setResults(null); return; }
     const h = setTimeout(() => {
-      searchPlayers(query, 30, server).then(setResults).catch((e) => setErr(String(e)));
+      searchPlayers(query, 30).then(setResults).catch((e) => setErr(String(e)));
     }, 250);
     return () => clearTimeout(h);
-  }, [q, server]);
+  }, [q]);
 
   const pickTab = (t: string) => {
     setTab(t); setProfile(null); setMatchDetail(null);
-    loadTab(t, period, layer, server);
+    loadTab(t, period, layer);
   };
   const openMatch = (matchId: string) => {
     setErr(null);
@@ -288,27 +220,15 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
   };
   const pickPeriod = (p: StatsPeriod) => {
     setPeriod(p);
-    loadTab(tab, p, layer, server);
+    loadTab(tab, p, layer);
   };
   const pickLayer = (l: string) => {
     setLayer(l);
-    loadTab("heatmap", period, l, server);
+    loadTab("heatmap", period, l);
   };
-  // The tab re-fetches its layer list for the new kind and picks the layer to
-  // draw (the same one when it has data of this kind), which loads the map.
-  const pickHeatKind = (k: HeatmapKind) => {
-    heatKindRef.current = k;
-    setHeatKind(k);
-    setHeat(null);
-  };
-  const pickServer = (sv: string) => {
-    setServer(sv);
-    loadTab(tab, period, layer, sv);               // re-scope the landing view
-    if (profile) openProfile(profile.eosId, sv);   // and any open profile
-  };
-  const openProfile = (eos: string, sv: string = server) => {
+  const openProfile = (eos: string) => {
     setPfLoading(true); setErr(null); setProfile(null);
-    fetchProfile(eos, sv)
+    fetchProfile(eos)
       .then(setProfile)
       .catch((e) => setErr(String(e)))
       .finally(() => setPfLoading(false));
@@ -325,53 +245,22 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
             ? <button className="ps-back" onClick={() => setProfile(null)}>← Back</button>
             : matchDetail
             ? <button className="ps-back" onClick={() => setMatchDetail(null)}>← Back</button>
-            : inline
-            ? <a className="ps-brand" href="/"><img className="ps-logo" src="/logo.svg" alt="squadreader.com" /></a>
             : <h2>Player Stats</h2>}
           <span className="pill beta-pill"
                 title="System in beta — send feedback to your server admin">BETA</span>
-          {inline && (
-            <nav className="ps-sitenav">
-              <a href="/replays">Replays</a>
-              <a href="/servers">Servers</a>
-              <a href="/stats/" className="act">Stats</a>
-              <a href="/setup">Setup</a>
-            </nav>
-          )}
         </div>
         <div className="ps-head-actions">
-          {inline && servers.length > 0 && (
-            <select className="ps-server" value={server}
-                    title="Select server" aria-label="Server"
-                    onChange={(e) => pickServer(e.target.value)}>
-              <option value="">🌐 Global</option>
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>{s.label || s.id}</option>
-              ))}
-            </select>
-          )}
           <label className="ps-search">
             <Magnifier />
             <input value={q} onChange={(e) => setQ(e.target.value)}
                    placeholder="Search players…" spellCheck={false} />
             {q && <button className="ps-search-clear" onClick={() => setQ("")}>✕</button>}
           </label>
-          {inline
-            ? <a className="ps-apply" href="https://discord.gg/3mQytyAwJd"
-                 target="_blank" rel="noopener">Apply on Discord</a>
-            : <button className="ps-close" onClick={close} title="close (Esc)">✕</button>}
+          <button className="ps-close" onClick={close} title="close (Esc)">✕</button>
         </div>
       </header>
 
       <div className="ps-body">
-        {inline && landing && (
-          <div className="ps-page-head">
-            <div className="ps-page-kicker">Stats</div>
-            <h1 className="ps-page-title">Player stats</h1>
-            <p className="ps-page-sub">All-time leaderboards, player profiles,
-              weapon meta, and heatmap — global scope.</p>
-          </div>
-        )}
         {err && <div className="ps-msg ps-err">Error: {err}</div>}
         {pfLoading && <div className="ps-msg"><span className="ps-spin" />Loading profile…</div>}
 
@@ -438,25 +327,16 @@ export function PlayerStats({ inline = false }: { inline?: boolean } = {}) {
             )}
 
             {!ldLoading && tab === "heatmap" && (
-              <HeatmapTab layer={layer} onPickLayer={pickLayer} heat={heat}
-                          kind={heatKind} onPickKind={pickHeatKind}
-                          server={server} />
+              <HeatmapTab layer={layer} onPickLayer={pickLayer} heat={heat} />
             )}
           </>
         )}
 
-        {inline && (
-          <div className="ps-page-foot">
-            squadreader.com · <a href="/">ana sayfa</a>
-          </div>
-        )}
       </div>
     </>
   );
 
-  return inline
-    ? <div id="player-stats" className="ps-view">{inner}</div>
-    : <dialog id="player-stats" ref={dlgRef}>{inner}</dialog>;
+  return <dialog id="player-stats" ref={dlgRef}>{inner}</dialog>;
 }
 
 function LeaderTable({ rows, stat, onPick }: {
@@ -681,57 +561,32 @@ function MatchTeamTable({ team, faction, winner, rows, onPick }: {
   );
 }
 
-function HeatmapTab({ layer, onPickLayer, heat, server, kind, onPickKind }: {
+function HeatmapTab({ layer, onPickLayer, heat }: {
   layer: string;
   onPickLayer: (l: string) => void;
   heat: LayerHeatmap | null;
-  server: string;
-  kind: HeatmapKind;
-  onPickKind: (k: HeatmapKind) => void;
 }) {
   const [opts, setOpts] = useState<HeatmapLayerOption[] | null>(null);
   const [optErr, setOptErr] = useState<string | null>(null);
-  const lastKind = useRef(kind);
-  const placements = kind !== "deaths";
 
-  // The picker only offers layers that have something of this kind to draw (on
-  // the selected server), so a pick can never land on an empty map. Re-fetches
-  // when the server scope or the kind changes.
+  // The picker only offers layers that have a positioned kill to draw, so a
+  // pick can never land on an empty map.
   useEffect(() => {
     let live = true;
-    const kindChanged = lastKind.current !== kind;
-    lastKind.current = kind;
-    if (kindChanged) setOpts(null);
     setOptErr(null);
-    fetchHeatmapLayers(server, kind)
+    fetchHeatmapLayers()
       .then((o) => {
         if (!live) return;
         setOpts(o);
-        // auto-pick when nothing is selected OR the current layer isn't offered
-        // on this server, so the dropdown + heatmap stay in sync across scopes.
-        // A new kind always loads: the layer stays when it has data of this
-        // kind too, so deaths and FOBs on one map are one click apart.
+        // auto-pick when nothing is selected or the current layer isn't offered.
         const offered = o.some((x) => x.layer_name === layer);
-        if (o.length > 0 && (!offered || kindChanged))
-          onPickLayer(offered ? layer : o[0].layer_name);
+        if (o.length > 0 && !offered) onPickLayer(o[0].layer_name);
       })
       .catch((e) => { if (live) setOptErr(String(e)); });
     return () => { live = false; };
-    // Re-runs on server/kind change; layer changes are ignored (would fight auto-pick).
+    // Runs once; layer changes are ignored (would fight auto-pick).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [server, kind]);
-
-  const kinds = IS_CENTRAL && (
-    <div className="hm-kinds" role="group" aria-label="What the heatmap counts">
-      {HEAT_KINDS.map((k) => (
-        <button key={k.key} aria-pressed={k.key === kind}
-                className={k.key === kind ? "ps-tab active" : "ps-tab"}
-                onClick={() => { if (k.key !== kind) onPickKind(k.key); }}>
-          {k.label}
-        </button>
-      ))}
-    </div>
-  );
+  }, []);
 
   let body: React.ReactNode;
   if (optErr) {
@@ -741,11 +596,8 @@ function HeatmapTab({ layer, onPickLayer, heat, server, kind, onPickKind }: {
   } else if (opts.length === 0) {
     body = (
       <div className="ps-msg">
-        {placements
-          ? "No FOB radio or HAB placements read yet. They come from each "
-            + "match's replay, so only matches with a stored replay count."
-          : "No positioned kill data yet. Positions are only recorded for "
-            + "matches processed after this version."}
+        No positioned kill data yet. Positions are only recorded for matches
+        processed after this version.
       </div>
     );
   } else {
@@ -756,9 +608,7 @@ function HeatmapTab({ layer, onPickLayer, heat, server, kind, onPickKind }: {
                   onChange={(e) => onPickLayer(e.target.value)}>
             {opts.map((o) => (
               <option key={o.layer_name} value={o.layer_name}>
-                {o.layer_name} ({placements
-                  ? `${o.placements ?? 0} placed`
-                  : `${o.deaths ?? 0} deaths`} / {o.matches} matches)
+                {o.layer_name} ({o.deaths ?? 0} deaths / {o.matches} matches)
               </option>
             ))}
           </select>
@@ -766,32 +616,13 @@ function HeatmapTab({ layer, onPickLayer, heat, server, kind, onPickKind }: {
         {heat && heat.cells.length > 0
           ? <HeatmapCanvas bounds={heat.bounds} name={heat.layerName}
                            data={{ kind: "layer", cells: heat.cells,
-                                   cellCm: heat.cellCm, maxCount: heat.maxCount,
-                                   unit: placements ? "placements" : "deaths" }} />
-          : <div className="ps-msg">
-              {placements
-                ? "Nothing of this kind placed on this layer in this period."
-                : "No death records on this layer for this period."}
-            </div>}
-        {placements && heat && heat.cells.length > 0 && (
-          <div className="ps-note">
-            {fmtInt(heat.total ?? 0)} placed, from the replays of{" "}
-            {fmtInt(heat.matches ?? 0)} {heat.matches === 1 ? "match" : "matches"}{" "}
-            on this layer. Map-spawned
-            radios and HABs are left out, and a HAB counts once it was built.
-            Each square is {Math.round(heat.cellCm / 100)} m across.
-          </div>
-        )}
+                                   cellCm: heat.cellCm, maxCount: heat.maxCount }} />
+          : <div className="ps-msg">No death records on this layer for this period.</div>}
       </>
     );
   }
 
-  return (
-    <div className="hm-tab">
-      {kinds}
-      {body}
-    </div>
-  );
+  return <div className="hm-tab">{body}</div>;
 }
 
 function SearchResults({ rows, q, onPick }: {

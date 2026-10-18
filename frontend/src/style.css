@@ -2790,14 +2790,6 @@ html, body, #root {
 }
 #player-stats .ps-period option { background: var(--panel); color: var(--ink); }
 
-/* ---- server scope selector (sits in the header) ---- */
-#player-stats .ps-server {
-  background: var(--surface-2); border: 1px solid var(--glass-brd); color: var(--ink);
-  border-radius: var(--radius-chip); padding: 6px 12px;
-  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
-}
-#player-stats .ps-server option { background: var(--panel); color: var(--ink); }
-
 /* ---- ELO tier badge ----
    --elo is the tier colour, handed over by the server (sqreader/elo.py) so the
    bands cannot drift between the two sides. Text stays in ink tokens: the dot
@@ -2887,7 +2879,6 @@ html, body, #root {
 /* ---- heatmap ---- */
 #player-stats .hm-tab { padding: 8px 16px 16px; }
 #player-stats .hm-controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-#player-stats .hm-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 #player-stats .hm-controls .ps-period { margin-left: 0; }
 #player-stats .hm-wrap { position: relative; }
 #player-stats .hm-canvas {

@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- The viewer's squadreader.com stats mode: `/stats` in the `build:apple`
+  bundle, `theme-site.css`, its server picker and the FOB/HAB heatmap kinds.
+  squadreader.com serves /stats as pages of its own now. The agent's own Stats
+  dialog, its Top Players panel and `leaderboard_public` are unchanged.
+
 ## [1.4.9] - 2026-10-11
 
 ### Added

@@ -15,7 +15,9 @@
 
   "_leaderboard_public_comment": [
     "false = /api/leaderboard returns 404 and the viewer drops its leaderboard",
-    "tabs and Top Players panel. Everything else stays; stats are still recorded."
+    "tabs and Top Players panel. Everything else stays; stats are still recorded.",
+    "Only this agent's own API and viewer: matches pushed to a central still",
+    "show on that central's leaderboards."
   ],
   "leaderboard_public": true,
 

@@ -44,7 +44,9 @@ DEFAULTS: dict[str, Any] = {
     "synthetic_match_ids": True,
     # False 404s /api/leaderboard and the viewer drops its leaderboard tabs and
     # Top Players panel. Profiles, weapons, the match list and heatmaps stay
-    # public, and stats are still recorded either way.
+    # public, and stats are still recorded either way. This agent's own API
+    # and viewer only: a box enrolled with a central still pushes its matches
+    # there, and central ranks them on its own leaderboards.
     "leaderboard_public": True,
     # --- optional central push (OFF by default; opt-in via `sqreader enroll`) ---
     # If set + the box is enrolled (see agent_creds/.env.agent), finished-match

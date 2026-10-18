@@ -42,4 +42,22 @@ const atOrigin = {
 const zu = { position: { x: 120, y: -80, z: 0 } } as never;
 assert.equal(passengersOf(atOrigin, zu).length, 0);
 
+// The same frame's markers and projectiles, and a template at the origin.
+const mk = {
+  players: [],
+  markers: [
+    { id: "a", type: "BP_MapMarker_Action_MoveSL", squad: 3, position: { x: 5, y: 6, z: 0 } },
+    { id: "b", type: "None", squad: 5017313, position: { x: -21.4, y: -21.5, z: -80 } },
+    { id: "c", type: "BP_MapMarker_EnemyDirector", squad: 911659, position: { x: 1, y: 1, z: 0 } },
+  ],
+  projectiles: [{ id: "p1", classShort: "BP_Projectile_762_C" }, { id: "p2", classShort: "None" }],
+  deployables: [{ id: "d", classShort: "BP_Ammocrate_C", position: { x: 0, y: 0, z: 0 } }],
+  vehicleSpawners: [{ id: "s", vehicleClass: null, position: { x: 0, y: 0, z: 6.9e-310 } }],
+} as unknown as Snapshot;
+sanitizeSnapshot(mk);
+assert.deepEqual(mk.markers.map((m) => m.id), ["a"]);
+assert.deepEqual(mk.projectiles.map((p) => p.id), ["p1"]);
+assert.equal(mk.deployables[0]!.position, null);
+assert.equal(mk.vehicleSpawners[0]!.position, null);
+
 console.log("sanitize: ok");

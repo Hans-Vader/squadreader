@@ -66,7 +66,7 @@ import pytest
 # broken suite rather than a missing tool.
 pytestmark = pytest.mark.skipif(
     shutil.which("docker") is None,
-    reason="needs a Docker daemon (README: Run in Docker > Testing this setup)")
+    reason="needs a Docker daemon (README: In Docker > Testing this setup)")
 
 # Not collected by a plain `pytest` — pyproject's testpaths is tests/, and this
 # tree is not it. Run it deliberately, on a box with a daemon:

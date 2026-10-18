@@ -1303,21 +1303,25 @@ def cmd_serve(args: argparse.Namespace) -> int:
                     if worker is not None:
                         worker.update_paths(_healed)
                 _check_update()
-                # Apply a staged release by exiting: the unit is Restart=always,
-                # so systemd brings us straight back and ExecStartPre performs
-                # the swap between the two processes.
-                #
-                # Not mid-match. A restart during a live game splits the replay
-                # and was, in an earlier version, enough to publish the match
-                # early — so the update waits for the game to be between
-                # matches, however long that takes.
-                if _restart_for_version and record_state_box.get("current") is None:
-                    gs_now = (snap.get("gameState") or {}) if snap else {}
-                    if gs_now.get("matchState") != "InProgress":
-                        print(f"[update] no match in progress — restarting to "
-                              f"apply v{_restart_for_version}", file=sys.stderr)
-                        raise SystemExit(0)
                 last_checkin = now
+
+            # Apply a staged release by exiting: the unit is Restart=always, so
+            # systemd brings us straight back and ExecStartPre performs the swap
+            # between the two processes.
+            #
+            # Not mid-match. A restart during a live game splits the replay and
+            # was, in an earlier version, enough to publish the match early — so
+            # the update waits for the game to be between matches, however long
+            # that takes. Checked on every tick once a release is staged: the
+            # gap between two matches lasts a minute or two, and looking for it
+            # only with the 5-minute check-in missed it for hours on busy
+            # servers (the 1.4.10 rollout: four of them still waiting after 4 h).
+            if _restart_for_version and record_state_box.get("current") is None:
+                gs_now = (snap.get("gameState") or {}) if snap else {}
+                if gs_now.get("matchState") != "InProgress":
+                    print(f"[update] no match in progress — restarting to "
+                          f"apply v{_restart_for_version}", file=sys.stderr)
+                    raise SystemExit(0)
 
             sleep_for = period - (time.time() - t_tick)
             if sleep_for > 0:

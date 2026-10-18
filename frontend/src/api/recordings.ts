@@ -2,6 +2,7 @@
 
 import type { RecordingMeta, Snapshot } from "../state/types";
 import { ReplayReconstructor, type RecordingLine } from "../state/replayReconstruct";
+import { sanitizeSnapshot } from "../state/sanitize";
 import {
   isPackedHeader,
   REPLAY_FORMAT_VERSION,
@@ -165,6 +166,7 @@ export async function fetchRecordingFrames(
     if (!frame) return;
     const snap = recon.push(frame);
     if (!snap) return;
+    sanitizeSnapshot(snap);
     const t = Date.parse(snap.timestamp ?? "");
     if (!Number.isFinite(t) || t < lastMs) { dropped++; return; }
     lastMs = t;

@@ -8,7 +8,11 @@ had class names of the same garbage.
 """
 from __future__ import annotations
 
-from sqreader.squad.snapshot import _ident_or_none, plausible_player
+from sqreader.squad.snapshot import (
+    _ident_or_none,
+    drop_phantom_entities,
+    plausible_player,
+)
 
 # What that role id really was: pool bytes of "ObjectProperty",
 # "NameProperty", ... decoded two at a time as UTF-16.
@@ -53,3 +57,23 @@ def test_identifier_fnames_pass_and_garbage_does_not():
     assert _ident_or_none("x" * 200) is None
     assert _ident_or_none("") is None
     assert _ident_or_none(None) is None
+
+
+def test_markers_and_projectiles_of_a_map_change_are_left_out():
+    """b0db7147 frame 0: seven "None" markers (squad 5017313, owner 0xf) and
+    "None" projectiles; every real one has a class."""
+    markers = [
+        {"type": "BP_MapMarker_Action_MoveSL", "squad": 3, "position": {"x": 5.0, "y": 6.0, "z": 0.0}},
+        {"type": "None", "squad": 5017313, "position": {"x": -21.4, "y": -21.5, "z": -80.0}},
+        {"type": "BP_MapMarker_EnemyDirector", "squad": 911659},
+        {"type": None, "squad": 0},
+    ]
+    projectiles = [{"classShort": "BP_Projectile_762_C"}, {"classShort": "None"}, {"classShort": None}]
+    crate = {"classShort": "BP_Ammocrate_C", "position": {"x": 0.0, "y": 0.0, "z": 0.0}}
+    spawner = {"classShort": "BP_VehicleSpawner_C", "position": {"x": 0.0, "y": 0.0, "z": 6.9e-310}}
+    fob = {"classShort": "BP_FOBRadio_RGF_C", "position": {"x": 0.0, "y": 40.0, "z": 0.0}}
+    mk, pr = drop_phantom_entities(markers, projectiles, [crate, fob], [spawner])
+    assert [m["type"] for m in mk] == ["BP_MapMarker_Action_MoveSL"]
+    assert [p["classShort"] for p in pr] == ["BP_Projectile_762_C"]
+    assert "position" not in crate and "position" not in spawner
+    assert fob["position"]["y"] == 40.0

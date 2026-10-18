@@ -2804,10 +2804,11 @@ def read_root_pos_yaw(pm: ProcessMemory, actor_addr: int,
         root + paths.scene_attach_parent_off))
     out["attached"] = bool(attach_parent)
     v = read_fvector(pm, root + paths.scene_component_to_world_translation_off)
-    # Exactly (0, 0, 0) is a transform nobody has set, not a place: b0db7147
-    # recorded an emplaced ZU-23 base there for the whole match, drawn in the
-    # middle of Fallujah. Nothing that moved through the world lands on it.
-    if v is not None and not (v.x == 0.0 and v.y == 0.0 and v.z == 0.0):
+    # x and y exactly 0.0 is a transform nobody has set, not a place: b0db7147
+    # recorded an emplaced ZU-23 base at (0, 0, 0) for the whole match, drawn
+    # in the middle of Fallujah. Nothing that moved through the world lands
+    # on it; z is ignored because a garbage transform can hold a denormal.
+    if v is not None and not (v.x == 0.0 and v.y == 0.0):
         out["position"] = {"x": v.x, "y": v.y, "z": v.z}
     yaw = _world_yaw(pm, root, paths)
     if yaw is not None:
@@ -3438,6 +3439,43 @@ def plausible_player(p: dict[str, Any]) -> bool:
     """
     team = p.get("teamId")
     return team is None or -1 <= team <= 2
+
+
+def _at_origin(pos: Any) -> bool:
+    # x and y both exactly 0.0; z is ignored, since a garbage transform can
+    # carry a denormal there (b0db7147's spawner: z = 6.9e-310).
+    return isinstance(pos, dict) and pos.get("x") == 0 and pos.get("y") == 0
+
+
+def _named(cls: Any) -> bool:
+    return bool(_ident_or_none(cls)) and cls != "None"
+
+
+def drop_phantom_entities(markers: list[dict[str, Any]],
+                          projectiles: list[dict[str, Any]],
+                          *placed: list[dict[str, Any]],
+                          ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Leave out what a map change leaves behind in the other lists too.
+
+    b0db7147's first frame also had seven markers of type "None" with squads
+    such as 5017313 and owners like 0xf, and projectiles of class "None" with
+    damage 4e-44; the viewer drew them at the world origin. Over two full
+    recordings (137k markers, 26k projectiles) every real marker has a
+    BP_MapMarker_* type and every real projectile a class, so those are the
+    test. A squad is a small number. For the remaining lists (`placed`), a
+    position with x and y exactly 0 is a transform nobody set, such as the
+    ammo-crate templates (*_GEN_VARIABLE_*) present in every frame, and is
+    removed so nothing draws there.
+    """
+    markers = [m for m in markers if _named(m.get("type"))
+               and not (isinstance(m.get("squad"), int)
+                        and not 0 <= m["squad"] <= 100)]
+    projectiles = [p for p in projectiles if _named(p.get("classShort"))]
+    for rows in (markers, projectiles, *placed):
+        for r in rows:
+            if _at_origin(r.get("position")):
+                del r["position"]
+    return markers, projectiles
 
 
 def dedupe_players(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -4357,6 +4395,8 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
     if game_state and not include_motd:
         game_state.pop("motd", None)
 
+    markers, projectiles = drop_phantom_entities(
+        markers, projectiles, deployables, vehicle_spawners, rally_points)
     _snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "server": server_id,

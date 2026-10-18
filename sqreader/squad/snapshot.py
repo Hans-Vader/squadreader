@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math as _math
 import os
+import re
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -67,6 +68,18 @@ def _read_fname(pm: ProcessMemory, addr: int,
         return None
     cmp_idx, number = struct.unpack("<II", raw)
     return alloc.fname_to_str(cmp_idx, number)
+
+
+# An identifier FName (a role id, a vehicle class): letters, digits, "_", "-"
+# and ".". A garbage FName index can land inside another pool entry and decode
+# its plain ASCII as UTF-16, which comes out as a run of CJK-looking characters
+# hundreds long (b0db7147: a role id of 396 such characters, really the bytes
+# of "ObjectProperty", "NameProperty", ...). Nothing that shape is an id.
+_IDENT_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+def _ident_or_none(name: str | None) -> str | None:
+    return name if name and _IDENT_RE.match(name) else None
 
 
 def _uobject_name(pm: ProcessMemory, addr: int,
@@ -1911,7 +1924,7 @@ def read_vehicle_spawner(pm: ProcessMemory, alloc: FNameEntryAllocator,
     cached = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["CachedSpecificVehicle"]))
     if cached:
-        out["vehicleClass"] = _uobject_name(pm, cached, alloc)
+        out["vehicleClass"] = _ident_or_none(_uobject_name(pm, cached, alloc))
         out["vehicleClassAddr"] = f"{cached:#x}"
     ta = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["TeamAuthority"]))
@@ -2791,7 +2804,10 @@ def read_root_pos_yaw(pm: ProcessMemory, actor_addr: int,
         root + paths.scene_attach_parent_off))
     out["attached"] = bool(attach_parent)
     v = read_fvector(pm, root + paths.scene_component_to_world_translation_off)
-    if v is not None:
+    # Exactly (0, 0, 0) is a transform nobody has set, not a place: b0db7147
+    # recorded an emplaced ZU-23 base there for the whole match, drawn in the
+    # middle of Fallujah. Nothing that moved through the world lands on it.
+    if v is not None and not (v.x == 0.0 and v.y == 0.0 and v.z == 0.0):
         out["position"] = {"x": v.x, "y": v.y, "z": v.z}
     yaw = _world_yaw(pm, root, paths)
     if yaw is not None:
@@ -2901,7 +2917,8 @@ def read_player(pm: ProcessMemory, alloc: FNameEntryAllocator,
     if "TeamId" in o:
         out["teamId"] = _safe(lambda: pm.read_i32(ps_addr + o["TeamId"]))
     if "CurrentRoleId" in o:
-        out["roleId"] = _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc)
+        out["roleId"] = _ident_or_none(
+            _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc))
 
     # Stats / network
     if "Score" in o:
@@ -3409,6 +3426,20 @@ def _player_rank(p: dict[str, Any]) -> tuple:
     )
 
 
+def plausible_player(p: dict[str, Any]) -> bool:
+    """Whether a row read as a SQPlayerState can be one at all.
+
+    On a map change the object walk can still hold an address whose memory is
+    no longer a player state. Read as one it gives a nonsense row: an empty id,
+    a name of stray characters, a soldier "attached" at the world origin, and a
+    team number in the millions (b0db7147's first frame: team 21159352). The
+    viewer drew that row as a passenger of the nearest vehicle to the origin.
+    A real player is in team 1 or 2, or 0 / -1 while still joining.
+    """
+    team = p.get("teamId")
+    return team is None or -1 <= team <= 2
+
+
 def dedupe_players(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One row per player.
 
@@ -3910,8 +3941,9 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
         profiling.STATS.walk_visits = walk_visits
         profiling.STATS.walk_full = walk_full
 
-    players = [read_player(pm, alloc, arr, paths, addr, caches=caches)
-               for addr in players_raw]
+    players = [p for p in (read_player(pm, alloc, arr, paths, addr, caches=caches)
+                           for addr in players_raw)
+               if plausible_player(p)]
 
     # Squad's per-player stats collectors (memory-only counters not in RCON):
     # read each singleton once, then splice its per-player entry into the

@@ -109,8 +109,8 @@ browsers, and must not be buffered:
 
 - **Traefik**: no `buffering` middleware on this router, and keep the
   entrypoint's `respondingTimeouts.writeTimeout` at 0 (the default).
-- **Caddy**: keep `/api/live/*` out of `encode`, for example
-  `@compress not path /api/live/*` and `encode @compress zstd gzip`.
+- **Caddy**: nothing to do; the stream arrives already compressed, so
+  `encode` passes it through.
 - **nginx**: nothing to do; the stream sends `X-Accel-Buffering: no`.
 
 Serve the map on its own hostname. Cookies do not tell ports apart, so two

@@ -32,10 +32,7 @@
 	# Content-Encoding is passed through untouched, so the zstd passthrough keeps
 	# spending zero CPU. zstd is listed first because it is preferred when the
 	# client offers both. `Vary: Accept-Encoding` is added automatically.
-	# The moderator live map is a Server-Sent-Events stream: compressing it
-	# would hold events inside a compression frame (docs/live-map.md).
-	@compress not path /api/live/*
-	encode @compress zstd gzip
+	encode zstd gzip
 
 	# Caddy adds neither of these on its own. `-Server` drops both Caddy's
 	# banner and the upstream's, which Caddy would otherwise append.

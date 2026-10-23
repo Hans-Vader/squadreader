@@ -101,7 +101,10 @@ export function PlayerPanel() {
   const voice   = p.voiceChannel && p.voiceChannel !== "none" ? p.voiceChannel : null;
 
   const roleUrl  = roleIconUrl(p);
-  const roleId   = p.roleId ?? "—";
+  // "None" is the game's word for no kit yet (spawning, just joined).
+  const roleId   = p.roleId && p.roleId !== "None" ? p.roleId : "No kit";
+  const faction  = (snap?.teams ?? []).find((t) => t.id === p.teamId)?.factionId
+    ?.split("_")[0] ?? null;
   const rolePool = p.rolePoolLabel ?? p.rolePool ?? "";
   const tc       = teamColor(p.teamId);
 
@@ -134,7 +137,7 @@ export function PlayerPanel() {
       </header>
       <div className="body">
         <div className="pp-sub">
-          Team <b style={{ color: tc }}>{p.teamId ?? "—"}</b>
+          <b style={{ color: tc }}>{faction ?? `Team ${p.teamId ?? "—"}`}</b>
           {inSquad && <> · Squad <b>{p.squadId}</b>{sq?.name ? ` · ${sq.name}` : ""}</>}
         </div>
 
@@ -149,8 +152,8 @@ export function PlayerPanel() {
           </div>
           <button className={"pp-follow" + (following ? " on" : "")}
                   onClick={toggleFollow}
-                  title="keep camera on this player">
-            {following ? "FOLLOW ✓" : "FOLLOW"}
+                  title="Keep the camera on this player">
+            {following ? "Following" : "Follow"}
           </button>
         </div>
 
@@ -220,29 +223,20 @@ export function PlayerPanel() {
           )}
         </div>
 
-        {/* Stat chips — two rows */}
+        {/* Match stats, each with its name: the old emoji glyphs (a target,
+            a skull, a car...) only explained themselves on hover. */}
         <div className="pp-stats">
-          <Stat g="🎯" c="var(--good)" label="Kills" v={st(stats, "kills")} />
-          <Stat g="💀" c="var(--bad)" label="Deaths" v={st(stats, "deaths")} />
-          <Stat g="⚠" c="var(--bad)" label="Team Kills" v={st(stats, "teamKills")} />
-          <Stat g="🚗" label="Vehicle Kills" v={st(stats, "vehicleKills")} />
-          <Stat g="🩹" label="Wounds Taken" v={st(stats, "wounds")} />
-        </div>
-        <div className="pp-stats">
-          <Stat g="✚" c="var(--good)" label="Revive Pts" v={st(stats, "revivedPoints")} />
-          <Stat g="❤" c="var(--good)" label="Heal Pts" v={st(stats, "healPoints")} />
-          <Stat g="🚩" label="Objective" v={st(stats, "objectiveScore")} />
-          <Stat g="🤝" label="Teamwork" v={st(stats, "teamWorkScore")} />
-        </div>
-
-        <div className="pp-foot">
-          <span className="pp-score">SCORE <b>{fmtInt(p.score)}</b></span>
-          {pos && (
-            <span className="pp-pos">
-              {Math.round(pos.x)}, {Math.round(pos.y)},{" "}
-              {pos.z != null ? Math.round(pos.z) : "—"}
-            </span>
-          )}
+          <Stat label="Kills" title="Kills" v={st(stats, "kills")} />
+          <Stat label="Deaths" title="Deaths" v={st(stats, "deaths")} />
+          <Stat label="TKs" title="Team kills" v={st(stats, "teamKills")} bad />
+          <Stat label="Vehicles" title="Vehicle kills" v={st(stats, "vehicleKills")} />
+          <Stat label="Wounded" title="Times wounded" v={st(stats, "wounds")} />
+          <Stat label="Revives" title="Revive points" v={st(stats, "revivedPoints")} />
+          <Stat label="Heals" title="Heal points" v={st(stats, "healPoints")} />
+          <Stat label="Objective" title="Objective score" v={st(stats, "objectiveScore")} />
+          <Stat label="Teamwork" title="Teamwork score" v={st(stats, "teamWorkScore")} />
+          <Stat label="Score" title={pos ? `Position ${Math.round(pos.x)}, ${Math.round(pos.y)}, ${pos.z != null ? Math.round(pos.z) : "—"}` : "Score"}
+                v={p.score} strong />
         </div>
       </div>
     </div>
@@ -258,13 +252,16 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Stat({ g, c, label, v }: {
-  g: string; c?: string; label: string; v: number | null | undefined;
+function Stat({ label, title, v, bad, strong }: {
+  label: string; title: string; v: number | null | undefined;
+  bad?: boolean; strong?: boolean;
 }) {
+  const n = v == null ? null : Number(v);
   return (
-    <div className="pp-stat" title={label}>
-      <span className="pp-stat-g" style={c ? { color: c } : undefined}>{g}</span>
+    <div className={"pp-stat" + (strong ? " strong" : "") + (bad && n ? " bad" : "")}
+         title={title}>
       <span className="pp-stat-v">{fmtInt(v)}</span>
+      <span className="pp-stat-k">{label}</span>
     </div>
   );
 }

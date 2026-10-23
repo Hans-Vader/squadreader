@@ -21,8 +21,11 @@ export type HitEntity =
 
 export interface Hit { d2: number; hit: HitEntity; }
 
+// `ghosts` are rallies no longer in the frame but still drawn where they stood
+// (burned, see rallyBurns.ts), so they can be hovered and clicked like the rest.
 export function hitTest(snap: Snapshot | null, wx: number, wy: number,
-                        worldRadius: number): Hit | null {
+                        worldRadius: number,
+                        ghosts: readonly RallyPoint[] = []): Hit | null {
   if (!snap) return null;
   const r2 = worldRadius * worldRadius;
   const czR2 = (worldRadius * 3) * (worldRadius * 3);
@@ -50,6 +53,7 @@ export function hitTest(snap: Snapshot | null, wx: number, wy: number,
   for (const d of snap.deployables ?? [])   consider({ type: "deployable", e: d }, d.position, r2);
   for (const sp of snap.vehicleSpawners ?? []) consider({ type: "spawner", e: sp }, sp.position, r2);
   for (const rp of snap.rallyPoints ?? [])  consider({ type: "rally", e: rp }, rp.position, r2);
+  for (const rp of ghosts)                   consider({ type: "rally", e: rp }, rp.position, r2);
   // Only hover caps that are actually drawn (hidden pre-roll cloud excluded).
   for (const cz of visibleCaps(snap.captureZones ?? [])) consider({ type: "capzone", e: cz }, cz.position, czR2);
   return best;

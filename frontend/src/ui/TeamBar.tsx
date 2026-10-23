@@ -19,10 +19,30 @@ function shortFaction(id: string | null | undefined): string {
   return id.split("_")[0] || id;
 }
 
+// The game's own phase names, as a viewer would say them. Unknown phases show
+// as they come rather than vanish.
+const STATE_LABEL: Record<string, string> = {
+  InProgress: "In progress",
+  EnteringMap: "Loading map",
+  WaitingToStart: "Starting",
+  Warmup: "Warmup",
+  WaitingPostMatch: "Match over",
+  PostMatch: "Match over",
+  EndState: "Match over",
+  LeavingMap: "Changing map",
+  Aborted: "Cancelled",
+};
+
+const PersonIcon = () => (
+  <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="currentColor">
+    <circle cx="8" cy="5" r="2.6" />
+    <path d="M3 14c0-2.9 2.2-4.8 5-4.8s5 1.9 5 4.8z" />
+  </svg>
+);
+
 function TeamCol({ team, align }: { team: TeamState | undefined; align: "left" | "right" }) {
   const id = team?.id ?? (align === "left" ? 1 : 2);
   const tickets = team?.tickets;
-  const kd = `${team?.kills ?? 0} / ${team?.deaths ?? 0}`;
   return (
     <div className={"tb-team " + (align === "left" ? "tb-left" : "tb-right")}
          style={{ ["--tc" as string]: `var(--team${id})` }}>
@@ -31,8 +51,10 @@ function TeamCol({ team, align }: { team: TeamState | undefined; align: "left" |
         <span className="tb-tickets">{tickets ?? "—"}</span>
       </div>
       <div className="tb-team-sub">
-        <span className="tb-players">{team?.playerCount ?? "—"}👤</span>
-        <span className="tb-kd">{kd}</span>
+        <span className="tb-players" title="Players">
+          <PersonIcon />{team?.playerCount ?? "—"}</span>
+        <span className="tb-kd" title="Kills / deaths">
+          <i>K/D</i> {team?.kills ?? 0}/{team?.deaths ?? 0}</span>
       </div>
     </div>
   );
@@ -61,7 +83,8 @@ export function TeamBar() {
       <div className="tb-centre">
         <div className="tb-map">{mapLine}</div>
         <div className="tb-clock">{fmtClock(gs?.elapsedSec)}
-          {state && <span className={"tb-state " + (live ? "on" : "")}>{state}</span>}
+          {state && <span className={"tb-state " + (live ? "on" : "")}>
+            {STATE_LABEL[state] ?? state}</span>}
         </div>
         <div className="tb-ticketbar">
           <div className="tb-tb-fill tb-tb-1" style={{ width: `${pct1}%` }} />

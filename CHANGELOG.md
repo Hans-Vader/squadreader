@@ -15,6 +15,73 @@ follows [Semantic Versioning](https://semver.org/).
   mod, and the match ignores case, spaces and underscores because how the game
   spells a modded layer is not knowable until it has run once. See the README
   for the format and for where the two corner numbers come from.
+- Their RAAS flags can be drawn too: `data/static/custom_capzones.json` holds
+  the cap-zone shapes of a modded layer, keyed by layer name, and wins over the
+  generated `capzones.json` that `scripts/fetch_capzones.py` rewrites.
+
+### Changed
+- The Google Analytics tag inherited from upstream is gone, so the web UI no
+  longer contacts Google - which is what PRIVACY.md already promised. A test
+  checks that `frontend/dist/index.html` ships no inline script, so adding one
+  fails the test instead of being silently blocked by the CSP.
+
+## [1.4.10] - 2026-10-18
+
+### Added
+- The agent tells central about the match being played right now: map, mode,
+  elapsed time, players, factions, tickets, and whether a replay is being
+  written. squadreader.com showed "Playing now" for one server only, because
+  this was never part of the agent everyone installs. It rides a light
+  check-in every minute; the full one with health and the Squad build stays
+  on five minutes, so the cost per hour does not change.
+- `leaderboard_public: false` hides the leaderboards: `/api/leaderboard`
+  answers 404, the Stats dialog drops its leaderboard tabs and Home its Top
+  Players panel. Profiles, search, weapons, match lists and heatmaps stay
+  public, and an enrolled agent still sends its matches to central, which
+  ranks them on its own boards (#11, r4b2).
+- The replay timeline folds down to its seek bar and controls with a caret
+  beside them, so the moments above the track stop covering the map (#12,
+  r4b2).
+- The home footer links to the GitHub repository (#13, r4b2).
+
+### Fixed
+- On a map change the reader could read memory that no longer held what it
+  had held a moment before, and wrote it down: player rows with empty ids,
+  names of stray characters and teams in the millions, markers of type "None"
+  with squads such as 5017313, nameless projectiles, and a vehicle sitting at
+  exactly (0, 0, 0). The viewer drew them as a ZU-23 in the middle of Fallujah
+  with a passenger whose name filled the tooltip. Those rows are left out now,
+  role ids and vehicle classes must look like identifiers, and a position at
+  exactly x = 0, y = 0 counts as no position. The viewer cleans the same rows
+  out of recordings made before this release.
+- Fast-forwarding a dense recording could grow the tab to 2.4 GB and end on
+  Chrome's out-of-memory page: every `ctx.save()` cost 772 bytes of Blink
+  heap, a few hundred times a frame. The map keeps that state itself now.
+- A recording with no layer block and one garbage coordinate (x ~ 5e151)
+  framed the map so wide that drawing the grid never finished (#9, r4b2).
+- The Docker image served the viewer as last committed, months old; it now
+  builds the frontend itself (#10, r4b2).
+- A replay link mounted the home page for one render first, which fetched
+  the recording list and the leaderboard for a page nobody saw. It opens
+  straight into the replay now.
+
+### Removed
+- The viewer's squadreader.com stats mode: `/stats` in the `build:apple`
+  bundle, `theme-site.css`, its server picker and the FOB/HAB heatmap kinds.
+  squadreader.com serves /stats as pages of its own now. The agent's own Stats
+  dialog, its Top Players panel and `leaderboard_public` are unchanged.
+
+## [1.4.9] - 2026-10-11
+
+### Added
+- The local replay server can start a recording part-way through
+  (`?from=<epoch ms>`), so the viewer plays a replay while it downloads and
+  jumps ahead without waiting for the download to get there.
+- Viewer: incaps are listed in the kill feed as they happen, with the death
+  that follows as a short row ("Show incaps" in the settings); each objective
+  shows how many players of each team stand on it ("Players on objectives");
+  a team view shows one side's own map; the timeline marks the moments that
+  decided the round; frames can be stepped one at a time.
 - The reader can run in its own container beside a Squad server you already
   run, reading the game's memory across the container boundary. Getting there
   by hand is a research project - the game process lives in another PID
@@ -44,6 +111,37 @@ follows [Semantic Versioning](https://semver.org/).
   80/443.
 
 ### Fixed
+- A replay that failed to upload was sent again, whole, on every flush -
+  about every 30 seconds - for as long as the failure lasted. An operator
+  whose uploads were being refused saw the same 88 replays re-sent that way
+  until about 20 TiB had gone out (#5). A failed replay now waits before it
+  is tried again, a minute at first and four times longer after each failure
+  up to six hours, and is set aside after the eighth failure, about 18 hours
+  on: a central that is down overnight still receives it, a refusal that
+  never changes costs eight uploads. A refusal no retry can change - HTTP 413,
+  or a file over central's 2 GiB limit - sets it aside at once, before a byte
+  is sent. The match's stats go up separately and are not affected. A
+  recording that never turns up is no longer waited for after a day, and the
+  `[push]` log line counts what was set aside as `skipped`.
+- Replays over 90 MiB could not be published through a proxy that caps the
+  request size (Cloudflare's cap is 100 MiB, answered with a 413), which a
+  full 100-player match always exceeds. They now go up in 64 MiB parts that
+  central reassembles and checks against the whole file's SHA-256 before it
+  takes the replay; the agent also checks central's answer to the last part
+  before retiring it from the queue. Needs a central that accepts parts, as
+  squadreader.com does.
+- Publishing to central ran inside the reading loop, so a large upload froze
+  the live map and the recording for as long as it took - 70 seconds were
+  measured for one replay. It runs beside the loop now, one flush at a time.
+- Squad renamed `FireTeamIndex` to `FireteamIndex`. The reader matched field
+  names exactly, lost the fire-team index, and squad leaders' map markers
+  showed as "offline / unresolved". Field names are now matched without
+  regard to case.
+- Invasion objectives are read as capture zones; the map showed raw actor
+  names such as `BP_CaptureZoneCluster_C_13` in their place.
+- A player stuck reconnecting has two player states, neither with an EOS id,
+  and both were kept: the kill feed printed a death for that player on every
+  tick. One row per player is kept now.
 - On a two-tier recording the viewer discarded every 4 Hz position update. The
   compact format wraps those lines so they are never diffed, and the browser's
   decoder had no branch for them at all, so each one came back as a copy of the

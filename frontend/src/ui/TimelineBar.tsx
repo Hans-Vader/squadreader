@@ -71,6 +71,16 @@ function saveView(v: ViewId) {
   try { localStorage.setItem(VIEW_KEY, v); } catch { /* not worth failing over */ }
 }
 
+// Folded, the bar keeps the track and the controls and drops the moments
+// above them, so it stops covering the bottom of the map.
+const FOLD_KEY = "sqr.timelineFolded";
+function readFolded(): boolean {
+  try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; }
+}
+function saveFolded(v: boolean) {
+  try { localStorage.setItem(FOLD_KEY, v ? "1" : "0"); } catch { /* not worth failing over */ }
+}
+
 const shortFaction = (f: string | null | undefined) => (f ?? "").split("_")[0] || null;
 
 function markerText(m: ReplayMarker, side: string): string {
@@ -201,11 +211,14 @@ const SkipIcon = ({ dir, n }: { dir: -1 | 1; n: number }) => (
           letterSpacing="-0.3">{n}</text>
   </Svg>
 );
+/** One frame back or forward: a film frame with a small arrow beside it. A
+ *  bar-and-triangle read as "jump to the start / end" of the match. */
 const StepIcon = ({ dir }: { dir: -1 | 1 }) => (
   <Svg>
     <g transform={dir > 0 ? "translate(24 0) scale(-1 1)" : undefined}>
-      <rect x="6" y="6.5" width="2.2" height="11" rx="0.8" />
-      <path d="M18 6.5v11L9.8 12z" />
+      <rect x="10.5" y="6" width="9" height="12" rx="1.6" fill="none"
+            stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.2 8.6v6.8L3.6 12z" />
     </g>
   </Svg>
 );
@@ -254,6 +267,7 @@ export function TimelineBar() {
 
   const [view, setView] = useState<ViewId>(readView);
   const pickView = (v: ViewId) => { setView(v); saveView(v); };
+  const [folded, setFolded] = useState(readFolded);
 
   // The time axis's width in px — overlap is a question of pixels — and where
   // it starts inside the bar, to put cards over the right spot. A callback
@@ -282,6 +296,22 @@ export function TimelineBar() {
   // One open thing at a time: the list of a crowded spot, or the speed menu.
   const [menu, setMenu] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+
+  // The bar's height, published on the stage as --tl-h: wherever the kill
+  // feed would reach down into the bar (any screen narrower than both side by
+  // side), it stands on top of it instead. The bar changes height with its
+  // view, so it is measured, not assumed.
+  const barObs = useRef<ResizeObserver | null>(null);
+  const barRef = useCallback((el: HTMLDivElement | null) => {
+    barObs.current?.disconnect();
+    barObs.current = null;
+    const stage = document.getElementById("stage");
+    if (!el) { stage?.style.removeProperty("--tl-h"); return; }
+    const ro = new ResizeObserver(() =>
+      stage?.style.setProperty("--tl-h", `${Math.ceil(el.offsetHeight)}px`));
+    ro.observe(el);
+    barObs.current = ro;
+  }, []);
   useEffect(() => {
     if (!menu) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(null); };
@@ -615,8 +645,8 @@ export function TimelineBar() {
                   : playing ? "Pause (Space)" : "Play (Space)";
 
   return (
-    <div id="timeline-bar" className={`tb-view-${view}`}>
-      {body}
+    <div id="timeline-bar" className={`tb-view-${view}`} ref={barRef}>
+      {folded ? track : body}
 
       <div className="tb-controls">
         <button className={`tb-play${stalled ? " tb-buffering" : ""}`}
@@ -638,15 +668,17 @@ export function TimelineBar() {
                 title="Next frame ( . )" aria-label="Next frame"><StepIcon dir={1} /></button>
         <span className="tb-clock"><b>{fmtMMSS(elapsedMs)}</b> / {fmtMMSS(durationMs)}</span>
         <span className="tb-spacer" />
-        <div className="tb-views" role="radiogroup" aria-label="Timeline style">
-          {VIEWS.map((v) => (
-            <button key={v.id} role="radio" aria-checked={view === v.id}
-                    className={view === v.id ? "on" : ""} title={v.label} aria-label={v.label}
-                    onClick={() => pickView(v.id)}>
-              <ViewIcon id={v.id} />
-            </button>
-          ))}
-        </div>
+        {!folded && (
+          <div className="tb-views" role="radiogroup" aria-label="Timeline style">
+            {VIEWS.map((v) => (
+              <button key={v.id} role="radio" aria-checked={view === v.id}
+                      className={view === v.id ? "on" : ""} title={v.label} aria-label={v.label}
+                      onClick={() => pickView(v.id)}>
+                <ViewIcon id={v.id} />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="tb-speed-wrap">
           <button className={`tb-speed${menu === "speed" ? " open" : ""}`}
                   aria-haspopup="menu" aria-expanded={menu === "speed"}
@@ -666,6 +698,13 @@ export function TimelineBar() {
             </div>
           )}
         </div>
+        <button className={`tb-icon tb-fold${folded ? "" : " open"}`}
+                aria-expanded={!folded}
+                title={folded ? "Show the timeline" : "Hide the timeline"}
+                aria-label={folded ? "Show the timeline" : "Hide the timeline"}
+                onClick={() => { setFolded(!folded); saveFolded(!folded); setMenu(null); }}>
+          <Caret />
+        </button>
       </div>
 
       {/* One card for every view: what is under the pointer, or — once a

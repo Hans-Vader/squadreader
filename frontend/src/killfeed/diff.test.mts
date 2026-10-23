@@ -1,6 +1,6 @@
 // Standalone unit test for the event-first kill-feed diff. Bundled with
 // esbuild and run under node — no test framework needed.
-import { createDiffState, diffSnapshot } from "./diff.ts";
+import { createDiffState, diffSnapshot, flushPendingDeaths } from "./diff.ts";
 
 let passed = 0, failed = 0;
 function ok(cond: any, msg: string) {
@@ -17,6 +17,12 @@ function P(name: string, eosId: string, team: number, kills: number, deaths: num
 }
 function snap(players: any[], events: any[] = [], tick = 1): any {
   return { tick, players, damageEvents: events, gameState: { elapsedSec: 100 }, vehicles: [] };
+}
+// A frame on a real clock, for the deaths that wait for a late event.
+function tsnap(players: any[], events: any[], ms: number): any {
+  return { tick: 1, players, damageEvents: events, vehicles: [],
+           timestamp: new Date(ms).toISOString(),
+           gameState: { elapsedSec: Math.floor(ms / 1000), matchState: "InProgress" } };
 }
 function evt(o: any): any {
   return { victim: null, victimEosId: null, victimTeam: null, attacker: null,
@@ -86,14 +92,22 @@ function evt(o: any): any {
   eq(byV["D"], "C", "D killed by C (not cross-paired)");
 }
 
-// 4. Death with no event -> honest "died", no invented killer.
+// 4. Death with no event -> it waits a moment for a late one, then an honest
+//    "died": no invented killer, and no "?" claiming one.
 {
   const s = createDiffState();
-  diffSnapshot(s, snap([P("B","b",2,0,0)]));
-  const r = diffSnapshot(s, snap([P("B","b",2,0,1)], []));
-  eq(r.newEntries.length, 1, "one died row");
+  const t0 = Date.UTC(2026, 9, 9, 13, 0, 0);
+  diffSnapshot(s, tsnap([P("B","b",2,0,0)], [], t0));
+  const r0 = diffSnapshot(s, tsnap([P("B","b",2,0,1)], [], t0 + 500));
+  eq(r0.newEntries.length, 0, "a death nothing explains waits");
+  const r1 = diffSnapshot(s, tsnap([P("B","b",2,0,1)], [], t0 + 2500));
+  eq(r1.newEntries.length, 0, "still waiting inside the window");
+  const r = diffSnapshot(s, tsnap([P("B","b",2,0,1)], [], t0 + 4600));
+  eq(r.newEntries.length, 1, "one died row once the wait is over");
   eq(r.newEntries[0].killer, null, "no killer invented");
   eq(r.newEntries[0].victim, "B", "victim B");
+  eq(r.newEntries[0].cause, "died", "says only that B died");
+  eq(r.newEntries[0].gameTimeSec, Math.floor((t0 + 500) / 1000), "timed at the death, not the wait");
 }
 
 // 5. World cause pulled from an event's damageType on an unattributed death.
@@ -158,31 +172,91 @@ function evt(o: any): any {
   eq(r2.newEntries.length, 0, "re-emitted event not double-counted");
 }
 
-// 10. REALISTIC: a wounded event attributes the death that follows it a
-//     few ticks later (Squad's incap -> bleed-out; no killed event fires).
+// 10. REALISTIC: A incapacitates B — a row at once — and the death that
+//     follows a few ticks later (Squad's incap -> bleed-out; no killed event
+//     fires) is attributed to A and marked as ending that incap.
 {
   const s = createDiffState();
   diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
-  // Tick 2: A incapacitates B — NO row (incaps aren't surfaced), B alive.
   const r1 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)],
-    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2,
+           causerWeapon:"BP_AK74_C", hitDistance: 87, headshot: true })]));
   // Tick 3: no new events, B bleeds out (death counter rises).
   const r2 = diffSnapshot(s, snap([P("A","a",1,1,0), P("B","b",2,0,1)], []));
-  eq(r1.newEntries.length, 0, "incap emits no row (kills only)");
+  eq(r1.newEntries.length, 1, "incap row at the incap");
+  eq(r1.newEntries[0]?.wounded, true, "the incap row is wounded");
+  eq(r1.newEntries[0]?.killer, "A", "incap row names the attacker");
+  eq(r1.newEntries[0]?.weaponClass, "BP_AK74_C", "incap row carries the weapon");
+  eq(r1.newEntries[0]?.hitDistance, 87, "incap row carries the distance");
+  eq(r1.newEntries[0]?.headshot, true, "incap row carries the headshot");
+  eq(r1.newEntries[0]?.victimTeam, 2, "incap row victim team");
+  eq(r1.newEntries[0]?.tk, false, "not a teamkill");
   eq(r2.newEntries.length, 1, "death row emitted on bleed-out");
   eq(r2.newEntries[0].killer, "A", "death attributed to the wounder A");
   eq(r2.newEntries[0].wounded, false, "the death row is a kill, not wounded");
+  eq(r2.newEntries[0].afterIncap, true, "the death ends the incap above it");
 }
 
-// 11. A wounded player who never dies (revived) yields no row at all.
+// 11. A wounded player who never dies (revived) yields the incap row only.
 {
   const s = createDiffState();
   diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
   const r1 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)],
     [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
   const r2 = diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)], []));
-  eq(r1.newEntries.length, 0, "incap emits no row");
-  eq(r2.newEntries.length, 0, "no kill row when the victim never dies");
+  eq(r1.newEntries.length, 1, "incap row");
+  eq(r2.newEntries.length, 0, "no death row when the victim never dies");
+}
+
+// 11b. An instant kill (a killed event, no wound) is one kill row, no incap.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("B","b",2,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,1,0), P("B","b",2,0,1)],
+    [evt({ killed:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  eq(r.newEntries.length, 1, "one row");
+  eq(r.newEntries[0]?.wounded, false, "a kill, not an incap");
+  eq(!!r.newEntries[0]?.afterIncap, false, "follows no incap");
+}
+
+// 11c. Finished off by someone else: the death names its own killer, so it
+//      is a full kill row, not the incap's short ending.
+{
+  const s = createDiffState();
+  const ps = (b: number, c: number) => [P("A","a",1,0,0), P("B","b",2,0,b), P("C","c",1,c,0)];
+  diffSnapshot(s, snap(ps(0, 0)));
+  diffSnapshot(s, snap(ps(0, 0),
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  const r = diffSnapshot(s, snap(ps(1, 1),
+    [evt({ killed:true, attacker:"C", victim:"B", victimEosId:"b", victimTeam:2 })]));
+  eq(r.newEntries.length, 1, "one death row");
+  eq(r.newEntries[0]?.killer, "C", "credited to the finisher");
+  eq(!!r.newEntries[0]?.afterIncap, false, "not the incap's short ending");
+}
+
+// 11d. An incap the window has closed on (revived) does not claim a later
+//      death: once it is gone, a new kill by the same player is a kill row.
+{
+  const s = createDiffState();
+  const at = (players: any[], events: any[], es: number): any =>
+    ({ tick: 1, players, damageEvents: events, gameState: { elapsedSec: es }, vehicles: [] });
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)], [], 100));
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)],
+    [evt({ wounded:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2, ts: 1 })], 100));
+  diffSnapshot(s, at([P("A","a",1,0,0), P("B","b",2,0,0)], [], 300));
+  const r = diffSnapshot(s, at([P("A","a",1,1,0), P("B","b",2,0,1)],
+    [evt({ killed:true, attacker:"A", victim:"B", victimEosId:"b", victimTeam:2, ts: 2 })], 301));
+  eq(r.newEntries.length, 1, "one death row");
+  eq(!!r.newEntries[0]?.afterIncap, false, "the revived incap is closed");
+}
+
+// 11e. A teamkill incap is marked as one.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("D","d",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,0,0), P("D","d",1,0,0)],
+    [evt({ wounded:true, attacker:"A", victim:"D", victimEosId:"d", victimTeam:1 })]));
+  eq(r.newEntries[0]?.tk, true, "teamkill incap");
 }
 
 // 12. Most-recent attacker wins: A wounds B, then C wounds B, then B dies.
@@ -246,6 +320,183 @@ function evt(o: any): any {
   const r = diffSnapshot(s, at([P("A","a",1,1,0), P("B","b",2,0,1)], [], 131));   // B bleeds out @131 (31s<45s)
   eq(r.newEntries.length, 1, "bleed-out death emitted after many quiet ticks");
   eq(r.newEntries[0].killer, "A", "attacker survives the game-time TTL at 4 Hz");
+}
+
+// 16. A player stuck reconnecting: the old player state (deaths 1, team 1) and
+//     the new one still loading (deaths 0, team 0), neither with an eosId.
+//     Recorded on skira 6cf1f93f, where this printed "? > MaG" 17 ticks running.
+{
+  const s = createDiffState();
+  const others = [P("A","a",1,0,0), P("B","b",2,0,0)];
+  diffSnapshot(s, snap([...others, P("MaG","m",1,2,1)]));             // seed, eos known
+  let rows = 0;
+  for (let i = 0; i < 17; i++) {
+    const r = diffSnapshot(s, snap([...others, P("MaG","",1,2,1), P("MaG","",0,0,0)]));
+    rows += r.newEntries.length;
+  }
+  eq(rows, 0, "a stuck reconnect is not a death per tick");
+  // The same pair seen with no eosId ever recorded for the name.
+  const t = createDiffState();
+  diffSnapshot(t, snap([...others, P("MaG","",1,2,1), P("MaG","",0,0,0)]));
+  let rows2 = 0;
+  for (let i = 0; i < 5; i++)
+    rows2 += diffSnapshot(t, snap([...others, P("MaG","",0,0,0), P("MaG","",1,2,1)])).newEntries.length;
+  eq(rows2, 0, "nor when the name never had an eosId, in either row order");
+}
+
+// 17. The loading copy alone for a while, then the old one again: the baseline
+//     must not drop to the loading copy's zero in between.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("X","",1,0,3)]));
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("X","",0,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,0,0), P("X","",1,0,3)]));
+  eq(r.newEntries.length, 0, "the old copy coming back is not a death");
+}
+
+// 18. The eosId drops out on the tick the player dies (harp 1f628ad2, FIRFIR):
+//     the death must still be seen then, attributed — not later, as a "?".
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",2,0,0), P("F","f",1,0,3)]));
+  const r = diffSnapshot(s, snap([P("A","a",2,1,0), P("F","",1,0,4)],
+    [evt({ killed:true, attacker:"A", victim:"F", victimTeam:1 })]));
+  eq(r.newEntries.length, 1, "death seen on the tick it happened");
+  eq(r.newEntries[0]?.killer, "A", "and attributed to its killer");
+  let later = 0;
+  for (let i = 0; i < 14; i++)
+    later += diffSnapshot(s, snap([P("A","a",2,1,0), P("F","",1,0,4), P("F","",0,0,0)])).newEntries.length;
+  later += diffSnapshot(s, snap([P("A","a",2,1,0), P("F","f",1,0,4)])).newEntries.length;
+  eq(later, 0, "nothing more while reconnecting, nor when the eosId returns");
+}
+
+// 19. Not over-broad: a reconnected player whose counters restarted still has
+//     their next real death counted.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",2,0,0), P("R","r",1,0,4)]));
+  diffSnapshot(s, snap([P("A","a",2,0,0), P("R","r",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",2,1,0), P("R","r",1,0,1)],
+    [evt({ killed:true, attacker:"A", victim:"R", victimEosId:"r", victimTeam:1 })]));
+  eq(r.newEntries.length, 1, "first death after a counter restart is counted");
+  eq(r.newEntries[0]?.killer, "A", "and attributed");
+}
+
+// 20. The killer's event lands a frame AFTER the death counter moved (altai
+//     1ffaead9: pau > TheKatrika, and one IED > pasha032 + berkefenci, each
+//     0.2 s late). The death waits for it and is credited, not "?".
+{
+  const s = createDiffState();
+  const t0 = Date.UTC(2026, 9, 9, 13, 42, 0);
+  const roster = (d: number) => [P("pau","pa",1,d,0), P("TheKatrika","tk",2,0,d),
+                                 P("sevket","sk",1,0,0), P("pasha","ps",2,0,d), P("berk","bk",2,0,d)];
+  diffSnapshot(s, tsnap(roster(0), [], t0));
+  const r0 = diffSnapshot(s, tsnap(roster(1), [], t0 + 250));
+  eq(r0.newEntries.length, 0, "nothing printed while the killer is unknown");
+  const r1 = diffSnapshot(s, tsnap(roster(1), [
+    evt({ killed:true, attacker:"pau", victim:"TheKatrika", victimEosId:"tk", victimTeam:2, causerWeapon:"BP_AKM_C" }),
+    evt({ killed:true, attacker:"sevket", victim:"pasha", victimEosId:"ps", victimTeam:2, causerWeapon:"BP_Deployable_IED_C" }),
+    evt({ killed:true, attacker:"sevket", victim:"berk", victimEosId:"bk", victimTeam:2, causerWeapon:"BP_Deployable_IED_C" }),
+  ], t0 + 450));
+  eq(r1.newEntries.length, 3, "all three credited as soon as their events land");
+  const by: any = {};
+  for (const e of r1.newEntries) by[e.victim] = e;
+  eq(by["TheKatrika"]?.killer, "pau", "pau credited");
+  eq(by["pasha"]?.killer, "sevket", "IED credited");
+  eq(by["berk"]?.weaponClass, "BP_Deployable_IED_C", "with its weapon");
+  eq(by["TheKatrika"]?.gameTimeSec, Math.floor((t0 + 250) / 1000), "timed at the death");
+}
+
+// 21. Bleeding out / giving up: the game records the victim's own soldier as
+//     the cause and no killer. That is not a suicide.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("K","k",2,0,0)]));
+  const r = diffSnapshot(s, snap([P("K","k",2,0,1)], [evt({ killed:true, attacker:null, victim:"K",
+    victimEosId:"k", selfInflicted:true, causerWeapon:"BP_Soldier_AFU_Marksman01_C" })]));
+  eq(r.newEntries.length, 1, "settled at once — the event already says it");
+  eq(r.newEntries[0].suicide, false, "not a suicide");
+  eq(r.newEntries[0].cause, "bledout", "bled out");
+  eq(r.newEntries[0].killer, null, "no killer");
+}
+
+// 21b. Self-inflicted with no cause at all: after a wound it is the bleed-out;
+//      with no wound before it (a redeploy at spawn, two of them in the first
+//      minutes of altai 1ffaead9) it says only that the player died.
+{
+  const selfK = evt({ killed:true, attacker:null, victim:"R", victimEosId:"r", selfInflicted:true });
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("R","r",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("R","r",1,0,1)], [selfK]));
+  eq(r.newEntries[0]?.cause, "died", "no wound before it: died, not 'bled out'");
+  eq(r.newEntries[0]?.suicide, false, "and not a suicide either");
+
+  const s2 = createDiffState();
+  diffSnapshot(s2, snap([P("R","r",1,0,0)]));
+  diffSnapshot(s2, snap([P("R","r",1,0,0)], [evt({ wounded:true, attacker:null, victim:"R",
+    victimEosId:"r", selfInflicted:true })]));
+  const r2 = diffSnapshot(s2, snap([P("R","r",1,0,1)], [selfK]));
+  eq(r2.newEntries[0]?.cause, "bledout", "after a wound: bled out");
+}
+
+// 21c. A fall is a fall, even when the game blames the faller.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("F","f",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("F","f",1,0,1)], [evt({ killed:true, attacker:null, victim:"F",
+    victimEosId:"f", selfInflicted:true, damageType:"BP_Fall_C" })]));
+  eq(r.newEntries[0]?.damageType, "BP_Fall_C", "world cause kept");
+  eq(r.newEntries[0]?.cause ?? null, null, "not 'died'");
+}
+
+// 22. A self-inflicted round from a real weapon still is a suicide.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("G","g",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("G","g",1,0,1)], [evt({ killed:true, attacker:null, victim:"G",
+    victimEosId:"g", selfInflicted:true, causerWeapon:"BP_RGD5Frag_Brown_C" })]));
+  eq(r.newEntries[0]?.suicide, true, "grenade on oneself is a suicide");
+  eq(r.newEntries[0]?.cause ?? null, null, "and not 'bled out'");
+}
+
+// 23. A weapon with no known hand keeps the weapon: "? <weapon> > victim".
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("V","v",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("V","v",1,0,1)], [evt({ killed:true, attacker:null, victim:"V",
+    victimEosId:"v", causerWeapon:"BP_AKM_C" })]));
+  eq(r.newEntries[0]?.killer, null, "no killer invented");
+  eq(r.newEntries[0]?.weaponClass, "BP_AKM_C", "the weapon is kept");
+  eq(r.newEntries[0]?.cause ?? null, null, "not 'died' — someone did this");
+}
+
+// 24. A torn read with a team that is no team (1216741536, 108 deaths at match
+//     end) is not a death.
+{
+  const s = createDiffState();
+  diffSnapshot(s, snap([P("A","a",1,0,0), P("S","",1,0,0)]));
+  const r = diffSnapshot(s, snap([P("A","a",1,0,0), P("S","",1216741536,0,108)]));
+  eq(r.newEntries.length, 0, "no row from a garbage team");
+}
+
+// 25. Deaths still waiting when the recording ends, or when play stops, come out.
+{
+  const s = createDiffState();
+  const t0 = Date.UTC(2026, 9, 9, 14, 0, 0);
+  diffSnapshot(s, tsnap([P("B","b",2,0,0)], [], t0));
+  const last = tsnap([P("B","b",2,0,1)], [], t0 + 300);
+  eq(diffSnapshot(s, last).newEntries.length, 0, "waiting");
+  const out = flushPendingDeaths(s, last);
+  eq(out.length, 1, "flushed at the end of the stream");
+  eq(out[0]?.cause, "died", "as it would have been after the wait");
+  eq(flushPendingDeaths(s, last).length, 0, "and only once");
+
+  const s2 = createDiffState();
+  diffSnapshot(s2, tsnap([P("B","b",2,0,0)], [], t0));
+  diffSnapshot(s2, tsnap([P("B","b",2,0,1)], [], t0 + 300));
+  const ended = { ...tsnap([P("B","b",2,0,1)], [], t0 + 600) };
+  ended.gameState.matchState = "WaitingPostMatch";
+  eq(diffSnapshot(s2, ended).newEntries.length, 1, "settled when the match stops");
 }
 
 console.log(`\nkillfeed diff tests: ${passed} passed, ${failed} failed`);

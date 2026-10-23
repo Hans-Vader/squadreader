@@ -392,6 +392,14 @@ export interface KillFeedEntry {
   tk: boolean;
   suicide: boolean;
   wounded: boolean;                       // incap row (kept distinct from final kill)
+  // A death row for a player whose incap row is already in the feed, by the
+  // same attacker or nobody: with incaps shown it only has to say they died.
+  afterIncap?: boolean;
+  // A death with no killer, and what is known about it: "bledout" when the
+  // game's own record has the victim's own soldier as the cause (bled out or
+  // gave up while wounded), "died" when nothing at all names a cause. Absent
+  // on every row that has a killer, a suicide or a world cause.
+  cause?: "bledout" | "died" | null;
 }
 
 export interface LayerBounds {
@@ -594,12 +602,6 @@ export interface LeaderRow extends PlayerSummary {
 export type StatsPeriod = "daily" | "weekly" | "monthly" | "alltime";
 
 /** One enrolled server, for the stats-page scope picker (/api/servers). */
-export interface ServerOption {
-  id: string;
-  label: string | null;
-  matches: number;
-}
-
 export interface WeaponMetaRow {
   weapon: string;
   kills: number;
@@ -635,11 +637,13 @@ export interface HeatmapLayerOption {
   layer_name: string;
   map_name: string | null;
   matches: number;
-  deaths: number;
+  deaths?: number;
 }
 
 /** cell_x/cell_y are the cell's lower-left corner, in world centimetres. */
-export interface HeatmapCell { cell_x: number; cell_y: number; n: number; }
+export interface HeatmapCell {
+  cell_x: number; cell_y: number; n: number;
+}
 export interface LayerHeatmap {
   layerName: string;
   period: string;

@@ -707,11 +707,31 @@ def cmd_serve(args: argparse.Namespace) -> int:
             res = ingest_client.flush_backlog(
                 push_backlog, stats_db_path, recordings_dir, push_creds or {},
                 push_replay_files=bool(config.get("push_replay")))
-            if res["sent"] or res["errors"]:
+            if res["sent"] or res["errors"] or res.get("skipped"):
                 print(f"[push] sent={res['sent']} pending={res['pending']} "
-                      f"errors={res['errors']}", file=sys.stderr)
+                      f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+                      file=sys.stderr)
         except Exception as _fe:
             print(f"[push] flush error: {_fe!r}", file=sys.stderr)
+
+    # The flush runs beside the tick loop, never in it. Publishing a replay
+    # takes about a minute per 300 MB, and run inline it froze the loop for
+    # exactly that long: the live map went 70 s stale and the next match's
+    # opening frames went unrecorded. It only stayed hidden while every large
+    # upload failed at once on the proxy's 413. One flush at a time; a tick
+    # that finds one still running just leaves it to finish.
+    import threading as _threading
+    _flush_thread: list[_threading.Thread] = []
+
+    def _flush_running() -> bool:
+        return bool(_flush_thread) and _flush_thread[0].is_alive()
+
+    def _flush_push_soon() -> None:
+        if _flush_running():
+            return
+        t = _threading.Thread(target=_flush_push, name="push-flush", daemon=True)
+        _flush_thread[:] = [t]
+        t.start()
 
     # -- Fleet check-in (Phase 0 remote-update telemetry) -------------------
     # A lightweight sealed report — agent version, the Squad BUILD we're attached
@@ -724,14 +744,22 @@ def cmd_serve(args: argparse.Namespace) -> int:
     _checkin_restarts = (fleet.bump_restarts(stats_db_path.parent)
                          if push_active and stats_db_path is not None else 0)
 
-    def _checkin() -> None:
+    def _checkin(*, with_health: bool = True) -> None:
         if not push_active or push_creds is None or push_backlog is None:
             return
         try:
+            # `snap` is the newest FULL frame (both tiers keep it current) and
+            # `record_state_box["current"]` is the open .sqrx, if any — so the
+            # live block describes the same match the recorder is writing.
             telem = fleet.gather(pm, arr, alloc, build_sha=_checkin_build_sha,
                                  restarts=_checkin_restarts,
                                  uptime_sec=time.time() - started,
-                                 channel=_checkin_channel)
+                                 channel=_checkin_channel,
+                                 live=fleet.live_match(
+                                     snap,
+                                     recording=record_state_box.get(
+                                         "current") is not None),
+                                 with_health=with_health)
             ingest_client.checkin(
                 push_creds, telem, seq=ingest_client._next_seq(push_backlog))
         except Exception as _ce:
@@ -1033,11 +1061,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
     started = time.time()
     last_report = started
     last_flush = started
-    _flush_push()  # drain anything a previous run queued before we start ticking
+    _flush_push_soon()  # drain what a previous run queued, beside the loop
     # First fleet check-in ~60s after boot (like the reference updater), then
     # every CHECKIN_INTERVAL_SEC. Seeding last_checkin in the past makes the first
     # one fire early so a freshly-broken server shows up on the fleet dashboard fast.
     last_checkin = started - (fleet.CHECKIN_INTERVAL_SEC - 60.0)
+    # Live block rides its own faster timer; see fleet.LIVE_INTERVAL_SEC.
+    last_live = started - fleet.LIVE_INTERVAL_SEC
     # Per-match recorder state. Lives across ticks; the recorder module's
     # `_handle_snap` opens/closes .sqrx files as matchId / matchState
     # change. Stays empty when recordings_dir is None.
@@ -1251,7 +1281,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
             # Central push flush — every ~30s, well off the per-tick hot path.
             if push_active and now - last_flush >= 30.0:
-                _flush_push()
+                _flush_push_soon()
                 last_flush = now
 
             # Persist the placer cache every ~30s so captured placers survive a
@@ -1260,33 +1290,47 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 _save_placer_cache(caches, placer_cache_path)
                 last_placer_save = now
 
-            # Fleet check-in every ~5 min (first ~60s post-boot), then an offset
-            # self-heal attempt on the same cadence. Off the hot path; both are
-            # best-effort. A successful self-heal rebinds `paths` for later ticks
-            # (and hands them to the build worker in two-tier mode).
-            if push_active and now - last_checkin >= fleet.CHECKIN_INTERVAL_SEC:
-                _checkin()
+            # Every minute a LIGHT check-in carrying the match being played now
+            # (central's "Playing now"); every fifth one is the FULL check-in
+            # (health + Squad build), and only that one goes on to the offset
+            # self-heal and the update check, so the expensive work keeps its
+            # 5-minute cadence (first ~60s post-boot). All of it is off the hot
+            # path and best-effort. A successful self-heal rebinds `paths` for
+            # later ticks (and hands them to the build worker in two-tier mode).
+            full = False
+            if push_active and now - last_live >= fleet.LIVE_INTERVAL_SEC:
+                # Decided once, here: the full check-in only ever goes out on a
+                # live tick, so the health report can never be skipped by the
+                # 5-minute work below running on a tick of its own.
+                full = now - last_checkin >= fleet.CHECKIN_INTERVAL_SEC
+                _checkin(with_health=full)
+                last_live = now
+            if full:
                 _healed = _selfheal()
                 if _healed is not None:
                     paths = _healed
                     if worker is not None:
                         worker.update_paths(_healed)
                 _check_update()
-                # Apply a staged release by exiting: the unit is Restart=always,
-                # so systemd brings us straight back and ExecStartPre performs
-                # the swap between the two processes.
-                #
-                # Not mid-match. A restart during a live game splits the replay
-                # and was, in an earlier version, enough to publish the match
-                # early — so the update waits for the game to be between
-                # matches, however long that takes.
-                if _restart_for_version and record_state_box.get("current") is None:
-                    gs_now = (snap.get("gameState") or {}) if snap else {}
-                    if gs_now.get("matchState") != "InProgress":
-                        print(f"[update] no match in progress — restarting to "
-                              f"apply v{_restart_for_version}", file=sys.stderr)
-                        raise SystemExit(0)
                 last_checkin = now
+
+            # Apply a staged release by exiting: the unit is Restart=always, so
+            # systemd brings us straight back and ExecStartPre performs the swap
+            # between the two processes.
+            #
+            # Not mid-match. A restart during a live game splits the replay and
+            # was, in an earlier version, enough to publish the match early — so
+            # the update waits for the game to be between matches, however long
+            # that takes. Checked on every tick once a release is staged: the
+            # gap between two matches lasts a minute or two, and looking for it
+            # only with the 5-minute check-in missed it for hours on busy
+            # servers (the 1.4.10 rollout: four of them still waiting after 4 h).
+            if _restart_for_version and record_state_box.get("current") is None:
+                gs_now = (snap.get("gameState") or {}) if snap else {}
+                if gs_now.get("matchState") != "InProgress":
+                    print(f"[update] no match in progress — restarting to "
+                          f"apply v{_restart_for_version}", file=sys.stderr)
+                    raise SystemExit(0)
 
             sleep_for = period - (time.time() - t_tick)
             if sleep_for > 0:
@@ -1334,7 +1378,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
             except Exception as _e:
                 print(f"stats finalize error on shutdown: {_e!r}",
                       file=sys.stderr)
-        _flush_push()  # best-effort: push whatever finalized before we exit
+        # Best-effort: push whatever finalized before we exit — unless a flush
+        # is already running beside us on the same queue; whatever it has not
+        # sent stays queued for the next start.
+        if not _flush_running():
+            _flush_push()
         if placer_cache_path is not None:
             _save_placer_cache(caches, placer_cache_path)  # keep placers
         srv.shutdown()
@@ -1432,7 +1480,8 @@ def cmd_stats_backfill(args: argparse.Namespace) -> int:
             push_backlog, stats_db, rec_dir, push_creds,
             push_replay_files=bool(config.get("push_replay")))
         print(f"push: sent={res['sent']} pending={res['pending']} "
-              f"errors={res['errors']}", file=sys.stderr)
+              f"errors={res['errors']} skipped={res.get('skipped', 0)}",
+              file=sys.stderr)
     print(f"backfill complete: {done}/{len(eligible)} matches in "
           f"{time.time() - t0:.0f}s", file=sys.stderr)
     print("note: run `sqreader stats-elo-recalc --stats-db ...` afterwards — "

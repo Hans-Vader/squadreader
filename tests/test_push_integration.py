@@ -59,7 +59,7 @@ def test_recorded_match_pushes_a_bundle_the_central_can_open(tmp_path, monkeypat
 
     # Flush → builds the bundle, seals it, "sends" it (captured). Stats-only.
     res = ic.flush_backlog(backlog, db, None, creds, push_replay_files=False)
-    assert res == {"sent": 1, "pending": 0, "errors": 0}
+    assert res == {"sent": 1, "pending": 0, "errors": 0, "skipped": 0}
     assert not list(backlog.glob("*.json"))                  # marker consumed
     assert captured["url"] == "https://central.example/ingest/match"
 

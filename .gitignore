@@ -84,3 +84,7 @@ build/
 
 # SDD execution scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Per-host compose changes (see README, "Local overrides")
+docker-compose.override.yml
+sqreader-data/

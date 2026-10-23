@@ -8,11 +8,24 @@ import { patchSnapshot, resetCarryOver } from "./carryOver";
 import { replayLoad } from "./replayLoad";
 import { isLiveId } from "../api/recordings";
 import type { ReplayMarker } from "./replayMarkers";
+import type { RallyRecord } from "./rallyBurns";
+import type { TeamView } from "../canvas/teamView";
 import type {
   ConnStatus, KillFeedEntry, Mode, RecordingMeta, Snapshot, TeamState, ViewState,
 } from "./types";
 
 export const KILL_FEED_MAX = 60;
+// Rows kept behind the panel: twice what it shows, because incap rows and
+// death rows share the list and the panel may be showing the deaths alone.
+export const KILL_FEED_KEEP = KILL_FEED_MAX * 2;
+
+const KF_INCAPS_LS_KEY = "sqr.killFeedIncaps";
+
+// Incap rows in the kill feed: on unless this browser turned them off.
+function loadKillFeedIncaps(): boolean {
+  try { return localStorage.getItem(KF_INCAPS_LS_KEY) !== "0"; }
+  catch { return true; }
+}
 
 // Backend publishes at a FIXED 0.5 Hz. These three constants are the entire
 // cadence contract for the live render path — keep them mutually consistent.
@@ -44,7 +57,7 @@ const SNAP_BUFFER_CAP = 48;  // memory ceiling (~10 s @ 4 Hz = 40 frames, + marg
 export type LayerKey =
   | "players" | "vehicles" | "deployables" | "markers"
   | "projectiles" | "spawners" | "rallies"
-  | "slNumbers" | "squadNumbers";
+  | "slNumbers" | "squadNumbers" | "capCounts";
 
 // Generic click-selection for every map entity that gets the shared InfoPanel
 // (everything EXCEPT player/vehicle, which keep their dedicated panels + follow).
@@ -60,7 +73,7 @@ export const LAYER_ORDER: LayerKey[] = [
 ];
 
 // Number-label options — shown as their own group in the settings menu.
-export const NUMBER_ORDER: LayerKey[] = ["slNumbers", "squadNumbers"];
+export const NUMBER_ORDER: LayerKey[] = ["slNumbers", "squadNumbers", "capCounts"];
 
 export const LAYER_LABELS: Record<LayerKey, string> = {
   players: "Players",
@@ -72,12 +85,13 @@ export const LAYER_LABELS: Record<LayerKey, string> = {
   rallies: "Rallies",
   slNumbers: "Squad leader numbers",
   squadNumbers: "All player & vehicle numbers",
+  capCounts: "Players on objectives",
 };
 
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   players: true, vehicles: true, deployables: true, markers: true,
   projectiles: true, spawners: false, rallies: true,
-  slNumbers: true, squadNumbers: false,
+  slNumbers: true, squadNumbers: false, capCounts: true,
 };
 
 const LAYERS_LS_KEY = "sqr.mapLayers";
@@ -260,6 +274,9 @@ interface Store {
   // grow unbounded across a long match.
   killFeed: KillFeedEntry[];
   killFeedVisible: boolean;
+  // Show incap rows, or the deaths alone. A display choice over the same rows,
+  // so it is remembered and flips without recomputing anything.
+  killFeedIncaps: boolean;
 
   // Replay-only: the WHOLE match's kill feed, pre-computed once at load by a
   // single forward diff pass over every frame (so each attacker is resolved
@@ -271,6 +288,13 @@ interface Store {
   // on every seek (its attack buffer was already consumed). Empty in live mode.
   replayKillTimeline: (KillFeedEntry & { frameIdx: number })[];
 
+  // Replay-only: every rally the recording has shown, with its sieges and who
+  // began them, and whether it was burned (see rallyBurns.ts). Grown by the
+  // loader as frames arrive and replaced, never mutated, when it changes. Kept
+  // across a seek that restarts the download, like the timeline markers: a
+  // rally burned before the new window is still a fact about the match.
+  rallyRecords: RallyRecord[];
+
   // Scoreboard overlay (Tab to toggle, like Squad in-game) — modal that
   // covers the map with team rosters + per-player stats. closedSquads
   // stores the user-collapsed squad ids per team (default expanded).
@@ -281,6 +305,10 @@ interface Store {
 
   // Map layer visibility — which entity families the canvas draws.
   layers: Record<LayerKey, boolean>;
+  // Whose map the canvas draws: both teams, or one team's own entities only.
+  // Deliberately NOT persisted: a filter left on from last time would open the
+  // next match with half the players silently missing.
+  teamView: TeamView;
 
   // mutators
   setMode(m: Mode): void;
@@ -325,19 +353,31 @@ interface Store {
   pushKillFeed(entries: KillFeedEntry[]): void;
   setKillFeed(entries: KillFeedEntry[]): void;
   setReplayKillTimeline(tl: (KillFeedEntry & { frameIdx: number })[]): void;
+  setRallyRecords(r: RallyRecord[]): void;
   clearKillFeed(): void;
   toggleKillFeed(): void;
+  setKillFeedIncaps(v: boolean): void;
   toggleScoreboard(): void;
   setScoreboardVisible(v: boolean): void;
   toggleScoreboardSquad(team: 1 | 2, sqId: number): void;
   toggleTimeline(): void;
   setTimelineVisible(v: boolean): void;
   toggleLayer(key: LayerKey): void;
+  setTeamView(t: TeamView): void;
   resetView(): void;
 }
 
+/** The mode the page was opened for. A replay link starts in replay mode, so
+ *  the Home page, and the recording list and leaderboard it fetches, never
+ *  mount for the one render before App's boot effect would switch over. */
+function initialMode(): Mode {
+  if (typeof window === "undefined") return "home";
+  return new URLSearchParams(window.location.search).get("mode") === "replay"
+    ? "replay" : "home";
+}
+
 export const useViewerStore = create<Store>((set) => ({
-  mode: "home",
+  mode: initialMode(),
   status: "connecting",
   canLive: false,
   prevSnap: null,
@@ -362,11 +402,15 @@ export const useViewerStore = create<Store>((set) => ({
   followVehicleId: null,
   killFeed: [],
   replayKillTimeline: [],
-  killFeedVisible: true,
+  rallyRecords: [],
+  // Open, except on a phone, where an open feed covers most of the map.
+  killFeedVisible: typeof window === "undefined" || window.innerWidth > 560,
+  killFeedIncaps: loadKillFeedIncaps(),
   scoreboardVisible: false,
   timelineVisible: false,
   scoreboardClosedSquads: { 1: [], 2: [] },
   layers: loadLayers(),
+  teamView: 0,
 
   setMode(m) {
     // Everything that remembers state ACROSS ticks has to be dropped here, or the
@@ -379,7 +423,8 @@ export const useViewerStore = create<Store>((set) => ({
     // without that, the first replay frame is diffed against the live match's
     // stats and invents kills that never happened.
     resetCarryOver();
-    set({ mode: m, snapBuffer: [], killFeed: [], replayKillTimeline: [] });
+    set({ mode: m, snapBuffer: [], killFeed: [], replayKillTimeline: [],
+          rallyRecords: [] });
   },
   setStatus(s) {
     set({ status: s });
@@ -455,7 +500,8 @@ export const useViewerStore = create<Store>((set) => ({
     // kept whatever it did not mention, so a second recording inherited the
     // first one's totalMs and bufferedMs for a render or two — the timeline
     // drew the old match's length around the new match's frames.
-    set((s) => ({ replay: { ...PRISTINE_REPLAY, id, loadNonce: s.replay.loadNonce } }));
+    set((s) => ({ replay: { ...PRISTINE_REPLAY, id, loadNonce: s.replay.loadNonce },
+                  rallyRecords: [] }));
   },
   appendReplayFrames(frames) {
     set((s) => {
@@ -561,9 +607,9 @@ export const useViewerStore = create<Store>((set) => ({
   pushKillFeed(entries) {
     if (!entries.length) return;
     set((s) => {
-      // Newest first; cap to KILL_FEED_MAX so the buffer can't grow
+      // Newest first; cap to KILL_FEED_KEEP so the buffer can't grow
       // unbounded across a 60-minute match (Squad can hit 300+ kills).
-      const next = [...entries, ...s.killFeed].slice(0, KILL_FEED_MAX);
+      const next = [...entries, ...s.killFeed].slice(0, KILL_FEED_KEEP);
       return { killFeed: next };
     });
   },
@@ -588,11 +634,19 @@ export const useViewerStore = create<Store>((set) => ({
   setReplayKillTimeline(tl) {
     set({ replayKillTimeline: tl });
   },
+  setRallyRecords(r) {
+    set({ rallyRecords: r });
+  },
   clearKillFeed() {
     set({ killFeed: [] });
   },
   toggleKillFeed() {
     set((s) => ({ killFeedVisible: !s.killFeedVisible }));
+  },
+  setKillFeedIncaps(v) {
+    try { localStorage.setItem(KF_INCAPS_LS_KEY, v ? "1" : "0"); }
+    catch { /* ignore quota / disabled storage */ }
+    set({ killFeedIncaps: v });
   },
   toggleScoreboard() {
     set((s) => ({ scoreboardVisible: !s.scoreboardVisible }));
@@ -616,6 +670,9 @@ export const useViewerStore = create<Store>((set) => ({
         scoreboardClosedSquads: { ...s.scoreboardClosedSquads, [team]: next },
       };
     });
+  },
+  setTeamView(t) {
+    set({ teamView: t });
   },
   toggleLayer(key) {
     set((s) => {

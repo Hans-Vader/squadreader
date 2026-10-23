@@ -21,6 +21,8 @@ export function passengersOf(snap: Snapshot | null, vehicle: Vehicle): Player[] 
   for (const p of snap.players ?? []) {
     const s = p.soldier;
     if (!s || s.stale || !s.attached || !s.position) continue;
+    // x and y exactly 0 is an unset position, not a seat.
+    if (s.position.x === 0 && s.position.y === 0) continue;
     const dx = s.position.x - vx;
     const dy = s.position.y - vy;
     if (dx * dx + dy * dy <= PASSENGER_RADIUS_SQ) out.push(p);

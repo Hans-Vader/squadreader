@@ -57,10 +57,15 @@ export function Home() {
 
   const [recs, setRecs] = useState<RecordingMeta[] | null>(null);
   const [top, setTop] = useState<LeaderRow[] | null>(null);
+  // The server 404s the leaderboard when its operator set leaderboard_public: false.
+  const [lbHidden, setLbHidden] = useState(false);
 
   useEffect(() => {
     listRecordings().then(setRecs).catch(() => setRecs([]));
-    fetchLeaderboard("kills", 6, "alltime").then(setTop).catch(() => setTop([]));
+    fetchLeaderboard("kills", 6, "alltime").then(setTop).catch((e) => {
+      setTop([]);
+      if (String(e?.message) === "HTTP 404") setLbHidden(true);
+    });
   }, []);
 
   const online = canLive !== false; // null (still probing) or true → assume online
@@ -128,7 +133,7 @@ export function Home() {
           })}
         </div>
 
-        <section className="hm-strip">
+        {!lbHidden && <section className="hm-strip">
           <div className="hm-sect-h">
             <span className="hm-lbl">Top Spieler</span>
             <span className="hm-lbl">Allzeit</span>
@@ -146,7 +151,7 @@ export function Home() {
               </button>
             ))}
           </div>
-        </section>
+        </section>}
 
         <footer className="hm-foot">
           <a href="https://github.com/cagrianilokumus/squadreader"

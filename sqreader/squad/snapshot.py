@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math as _math
 import os
+import re
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -67,6 +68,18 @@ def _read_fname(pm: ProcessMemory, addr: int,
         return None
     cmp_idx, number = struct.unpack("<II", raw)
     return alloc.fname_to_str(cmp_idx, number)
+
+
+# An identifier FName (a role id, a vehicle class): letters, digits, "_", "-"
+# and ".". A garbage FName index can land inside another pool entry and decode
+# its plain ASCII as UTF-16, which comes out as a run of CJK-looking characters
+# hundreds long (b0db7147: a role id of 396 such characters, really the bytes
+# of "ObjectProperty", "NameProperty", ...). Nothing that shape is an id.
+_IDENT_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+def _ident_or_none(name: str | None) -> str | None:
+    return name if name and _IDENT_RE.match(name) else None
 
 
 def _uobject_name(pm: ProcessMemory, addr: int,
@@ -1911,7 +1924,7 @@ def read_vehicle_spawner(pm: ProcessMemory, alloc: FNameEntryAllocator,
     cached = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["CachedSpecificVehicle"]))
     if cached:
-        out["vehicleClass"] = _uobject_name(pm, cached, alloc)
+        out["vehicleClass"] = _ident_or_none(_uobject_name(pm, cached, alloc))
         out["vehicleClassAddr"] = f"{cached:#x}"
     ta = _safe(lambda: pm.read_u64(
         sp_addr + VEHICLE_SPAWNER_OFFSETS["TeamAuthority"]))
@@ -2190,10 +2203,27 @@ def read_marker(pm: ProcessMemory, alloc: FNameEntryAllocator,
 # define the offsets dict via dump_struct_layout SQSquadStateDataMapMarker.
 
 
+# Capture-zone actor classes, each with the property that points at its
+# SQCaptureZoneComponent. Invasion places its objectives as a BP of their own
+# whose component is an SQCaptureZoneInvasionComponent — a subclass, so every
+# field read_capture_zone takes from it sits at the same offset. Matching only
+# BP_CaptureZone_C left captureZones empty on every Invasion layer, and the map
+# fell back to the lane graph's bare cluster names (verified live on Yehorivka
+# Invasion v2: five BP_CaptureZoneInvasion_C actors, component at +0x2c8).
+CAPZONE_ACTOR_CLASSES: dict[str, str] = {
+    "BP_CaptureZone_C": "SQCaptureZone",
+    "BP_CaptureZoneInvasion_C": "SQCaptureZoneInvasion",
+}
+
+
 def read_capture_zone(pm: ProcessMemory, alloc: FNameEntryAllocator,
                       paths: SnapshotPaths, cz_addr: int,
-                      uobject_name: str | None) -> dict[str, Any]:
-    """Read one BP_CaptureZone_C actor + its attached SQCaptureZoneComponent."""
+                      uobject_name: str | None,
+                      comp_key: str = "SQCaptureZone") -> dict[str, Any]:
+    """Read one capture-zone actor + its attached SQCaptureZoneComponent.
+
+    `comp_key` names the actor property holding the component pointer, as
+    listed in CAPZONE_ACTOR_CLASSES for the actor's class."""
     ao = paths.capzone_actor_offsets
     co = paths.capzone_comp_offsets
     out: dict[str, Any] = {
@@ -2209,7 +2239,7 @@ def read_capture_zone(pm: ProcessMemory, alloc: FNameEntryAllocator,
             out["position"] = {"x": v.x, "y": v.y, "z": v.z}
 
     # Follow the actor's SQCaptureZone pointer into its component
-    comp = _safe(lambda: pm.read_u64(cz_addr + ao["SQCaptureZone"])) if "SQCaptureZone" in ao else 0
+    comp = _safe(lambda: pm.read_u64(cz_addr + ao[comp_key])) if comp_key in ao else 0
     if not comp:
         out["component"] = None
         return out
@@ -2774,7 +2804,11 @@ def read_root_pos_yaw(pm: ProcessMemory, actor_addr: int,
         root + paths.scene_attach_parent_off))
     out["attached"] = bool(attach_parent)
     v = read_fvector(pm, root + paths.scene_component_to_world_translation_off)
-    if v is not None:
+    # x and y exactly 0.0 is a transform nobody has set, not a place: b0db7147
+    # recorded an emplaced ZU-23 base at (0, 0, 0) for the whole match, drawn
+    # in the middle of Fallujah. Nothing that moved through the world lands
+    # on it; z is ignored because a garbage transform can hold a denormal.
+    if v is not None and not (v.x == 0.0 and v.y == 0.0):
         out["position"] = {"x": v.x, "y": v.y, "z": v.z}
     yaw = _world_yaw(pm, root, paths)
     if yaw is not None:
@@ -2884,7 +2918,8 @@ def read_player(pm: ProcessMemory, alloc: FNameEntryAllocator,
     if "TeamId" in o:
         out["teamId"] = _safe(lambda: pm.read_i32(ps_addr + o["TeamId"]))
     if "CurrentRoleId" in o:
-        out["roleId"] = _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc)
+        out["roleId"] = _ident_or_none(
+            _read_fname(pm, ps_addr + o["CurrentRoleId"], alloc))
 
     # Stats / network
     if "Score" in o:
@@ -2921,17 +2956,30 @@ def read_player(pm: ProcessMemory, alloc: FNameEntryAllocator,
             # PlayerStates that linger for a few ticks after a disconnect)
             # can't surface absurd counts/scores. Counters are non-negative
             # and never reach 1e6 in a round; scores stay well within ±1e6.
-            def _i(name, lo=-1000, hi=1_000_000):
+            # Field names are matched case-insensitively when the exact one is
+            # missing: a Squad update (10-2026) renamed FireTeamIndex to
+            # FireteamIndex, the exact lookup found nothing, fireTeamIndex went
+            # null for every player and no fireteam leader's marker could be
+            # attributed any more. Same field, same offset, same type.
+            def _k(name):
                 if name in psd:
-                    v = struct.unpack_from("<i", data, psd[name])[0]
+                    return name
+                low = name.lower()
+                return next((k for k in psd if k.lower() == low), None)
+            def _i(name, lo=-1000, hi=1_000_000):
+                k = _k(name)
+                if k is not None:
+                    v = struct.unpack_from("<i", data, psd[k])[0]
                     return v if lo <= v <= hi else None
             def _f(name, lo=-1e6, hi=1e6):
-                if name in psd:
-                    v = struct.unpack_from("<f", data, psd[name])[0]
+                k = _k(name)
+                if k is not None:
+                    v = struct.unpack_from("<f", data, psd[k])[0]
                     return v if (v == v and lo <= v <= hi) else None
             def _b(name):
-                if name in psd:
-                    return bool(data[psd[name]] & 1)
+                k = _k(name)
+                if k is not None:
+                    return bool(data[psd[k]] & 1)
             # PlayerNamePrefix is an FString member of PlayerStateDataObject
             # at +0x40 (within the embedded struct, NOT within our 128 B
             # snapshot above; need an absolute read from psd_base+offset).
@@ -3364,6 +3412,109 @@ _CAT_SPAWNER = 5
 _CAT_RALLY = 6
 
 
+def _player_rank(p: dict[str, Any]) -> tuple:
+    """How useful a player row is, for picking one of several copies."""
+    sld = p.get("soldier") or {}
+    st = p.get("stats") or {}
+    return (
+        int(bool(sld and sld.get("classShort") and not sld.get("stale"))),
+        # Team 0 is a connection still loading in: it has not joined the match.
+        int(p.get("teamId") not in (0, None)),
+        int(bool(p.get("roleId") and p.get("roleId") != "None")),
+        float(p.get("score") or 0.0),
+        # Counters only climb during a match: the copy that is behind is stale.
+        int(st.get("deaths") or 0) + int(st.get("kills") or 0),
+    )
+
+
+def plausible_player(p: dict[str, Any]) -> bool:
+    """Whether a row read as a SQPlayerState can be one at all.
+
+    On a map change the object walk can still hold an address whose memory is
+    no longer a player state. Read as one it gives a nonsense row: an empty id,
+    a name of stray characters, a soldier "attached" at the world origin, and a
+    team number in the millions (b0db7147's first frame: team 21159352). The
+    viewer drew that row as a passenger of the nearest vehicle to the origin.
+    A real player is in team 1 or 2, or 0 / -1 while still joining.
+    """
+    team = p.get("teamId")
+    return team is None or -1 <= team <= 2
+
+
+def _at_origin(pos: Any) -> bool:
+    # x and y both exactly 0.0; z is ignored, since a garbage transform can
+    # carry a denormal there (b0db7147's spawner: z = 6.9e-310).
+    return isinstance(pos, dict) and pos.get("x") == 0 and pos.get("y") == 0
+
+
+def _named(cls: Any) -> bool:
+    return bool(_ident_or_none(cls)) and cls != "None"
+
+
+def drop_phantom_entities(markers: list[dict[str, Any]],
+                          projectiles: list[dict[str, Any]],
+                          *placed: list[dict[str, Any]],
+                          ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Leave out what a map change leaves behind in the other lists too.
+
+    b0db7147's first frame also had seven markers of type "None" with squads
+    such as 5017313 and owners like 0xf, and projectiles of class "None" with
+    damage 4e-44; the viewer drew them at the world origin. Over two full
+    recordings (137k markers, 26k projectiles) every real marker has a
+    BP_MapMarker_* type and every real projectile a class, so those are the
+    test. A squad is a small number. For the remaining lists (`placed`), a
+    position with x and y exactly 0 is a transform nobody set, such as the
+    ammo-crate templates (*_GEN_VARIABLE_*) present in every frame, and is
+    removed so nothing draws there.
+    """
+    markers = [m for m in markers if _named(m.get("type"))
+               and not (isinstance(m.get("squad"), int)
+                        and not 0 <= m["squad"] <= 100)]
+    projectiles = [p for p in projectiles if _named(p.get("classShort"))]
+    for rows in (markers, projectiles, *placed):
+        for r in rows:
+            if _at_origin(r.get("position")):
+                del r["position"]
+    return markers, projectiles
+
+
+def dedupe_players(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per player.
+
+    When a client disconnects and reconnects, both the old (about to be GC'd)
+    and the new SQPlayerState exist for a while. Rows are grouped by EOS user
+    id and the most useful copy is kept (`_player_rank`); on a tie the later
+    one (higher internal index, last in iteration) wins.
+
+    A player stuck reconnecting has two copies and NEITHER carries an EOS id:
+    the old one holding the match's deaths and the new one still loading (team
+    0, deaths 0). Those used to pass through untouched, and every consumer that
+    keys a player by name saw one person flip between two sets of counters —
+    the kill feed printed a death on every tick. So rows without an id are
+    grouped by name too, and dropped outright when a row WITH an id already
+    has that name.
+    """
+    by_eos: dict[str, dict[str, Any]] = {}
+    for p in players:
+        key = p.get("eosId")
+        if key and (key not in by_eos or _player_rank(p) >= _player_rank(by_eos[key])):
+            by_eos[key] = p
+    named = {p.get("name") for p in by_eos.values() if p.get("name")}
+    by_name: dict[str, dict[str, Any]] = {}
+    unnamed: list[dict[str, Any]] = []
+    for p in players:
+        if p.get("eosId"):
+            continue
+        name = p.get("name")
+        if not name:
+            unnamed.append(p)
+        elif name in named:
+            continue
+        elif name not in by_name or _player_rank(p) >= _player_rank(by_name[name]):
+            by_name[name] = p
+    return list(by_eos.values()) + list(by_name.values()) + unnamed
+
+
 def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
                    alloc: FNameEntryAllocator,
                    *, server_id: str = "squad",
@@ -3422,12 +3573,14 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
     game_state_addr: int | None = None
     lane_initializer_addr: int | None = None
     lane_visualizer_addr: int | None = None
-    capture_zones_raw: list[int] = []
-    # The live class address of BP_CaptureZone_C, captured during the walk
-    # (its startup-resolved address may be stale after a map reload). Used
-    # to lazily (re)derive the SQCaptureZone actor offset if the frozen
-    # paths didn't have it.
-    cz_class_addr = 0
+    # (actor, component-pointer property) per capture zone, see
+    # CAPZONE_ACTOR_CLASSES.
+    capture_zones_raw: list[tuple[int, str]] = []
+    # The live class address of each capture-zone actor class, captured during
+    # the walk (a startup-resolved address may be stale after a map reload).
+    # Used to lazily (re)derive the component-pointer offset when the frozen
+    # paths don't have it — Invasion's is never resolved at startup.
+    cz_class_addrs: dict[str, int] = {}
     squad_states_raw: list[int] = []
     sq_squad_state_class = paths.sq_squad_state_class
     vehicles_raw: list[tuple[int, int]] = []
@@ -3579,7 +3732,7 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
             # for the whole reset window. Skip the cache so next tick re-reads.
             if cn and cn != "None":
                 class_cache[class_addr] = cn
-        if cn == "BP_CaptureZone_C":
+        if cn in CAPZONE_ACTOR_CLASSES:
             nm = _uobject_name(pm, obj_addr, alloc) or ""
             if not nm.startswith("Default__"):
                 return (_wd.KIND_CAPZONE, obj_addr, class_addr)
@@ -3798,9 +3951,13 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
         elif kind == _wd.KIND_PROJECTILE:
             projectiles_raw.append((obj_addr, extra))
         elif kind == _wd.KIND_CAPZONE:
-            capture_zones_raw.append(obj_addr)
-            if not cz_class_addr:
-                cz_class_addr = extra
+            # A cached classification can outlive this tick's name cache, so
+            # fall back to reading the class name.
+            cz_cn = class_cache.get(extra) or _uobject_name(pm, extra, alloc) or ""
+            comp_key = CAPZONE_ACTOR_CLASSES.get(cz_cn)
+            if comp_key is not None:
+                capture_zones_raw.append((obj_addr, comp_key))
+                cz_class_addrs.setdefault(comp_key, extra)
         elif kind == _wd.KIND_GAMESTATE:
             if game_state_addr is None:
                 game_state_addr = obj_addr
@@ -3822,8 +3979,9 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
         profiling.STATS.walk_visits = walk_visits
         profiling.STATS.walk_full = walk_full
 
-    players = [read_player(pm, alloc, arr, paths, addr, caches=caches)
-               for addr in players_raw]
+    players = [p for p in (read_player(pm, alloc, arr, paths, addr, caches=caches)
+                           for addr in players_raw)
+               if plausible_player(p)]
 
     # Squad's per-player stats collectors (memory-only counters not in RCON):
     # read each singleton once, then splice its per-player entry into the
@@ -3930,29 +4088,7 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
             sld.pop("_controllerAddr", None)
             sld.pop("_lastHitByAddr", None)
 
-    # ---- dedupe SQPlayerStates by OnlineUserId ---------------------------
-    # When a client disconnects and reconnects, both the old (about to be
-    # GC'd) and new SQPlayerState briefly exist. Group by EOS user id and
-    # keep the "most useful" entry — preferring one with a connected
-    # soldier and non-zero score. If two are tied, the later one
-    # (higher internal index, last-in-iteration) wins.
-    seen: dict[str, dict[str, Any]] = {}
-    no_id: list[dict[str, Any]] = []
-    def _score(pp: dict[str, Any]) -> tuple:
-        sld = pp.get("soldier") or {}
-        return (
-            int(bool(sld and sld.get("classShort") and not sld.get("stale"))),
-            int(bool(pp.get("roleId") and pp.get("roleId") != "None")),
-            float(pp.get("score") or 0.0),
-        )
-    for p in players:
-        key = p.get("eosId")
-        if not key:
-            no_id.append(p)
-            continue
-        if key not in seen or _score(p) >= _score(seen[key]):
-            seen[key] = p
-    players = list(seen.values()) + no_id
+    players = dedupe_players(players)
     game_state = (read_game_state(pm, alloc, paths, game_state_addr)
                   if game_state_addr else None)
     lane = (read_lane_graph(pm, alloc, lane_initializer_addr,
@@ -3964,19 +4100,21 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
     teams = (read_team_states(pm, alloc, paths, game_state_addr)
              if game_state_addr else [])
     squads = [read_squad_state(pm, alloc, paths, a) for a in squad_states_raw]
-    # If the SQCaptureZone actor offset wasn't resolved at startup (the BP
-    # class wasn't loaded for the map that was active then), derive it now
-    # from the live capture-zone class. BP field offsets are layout-stable
-    # across reloads, so this one-time derivation sticks.
-    if (capture_zones_raw and cz_class_addr
-            and "SQCaptureZone" not in paths.capzone_actor_offsets):
-        lay = get_class_layout(pm, cz_class_addr, alloc)
-        if "SQCaptureZone" in lay:
+    # If a capture-zone actor's component offset wasn't resolved at startup
+    # (the BP class wasn't loaded for the map that was active then), derive
+    # it now from the live class. BP field offsets are layout-stable across
+    # reloads, so this one-time derivation sticks.
+    for comp_key, cls_addr in cz_class_addrs.items():
+        if comp_key in paths.capzone_actor_offsets:
+            continue
+        lay = get_class_layout(pm, cls_addr, alloc)
+        if comp_key in lay:
             paths.capzone_actor_offsets = dict(paths.capzone_actor_offsets)
-            paths.capzone_actor_offsets["SQCaptureZone"] = lay["SQCaptureZone"].offset
+            paths.capzone_actor_offsets[comp_key] = lay[comp_key].offset
     capture_zones = [
-        read_capture_zone(pm, alloc, paths, a, _uobject_name(pm, a, alloc) or "")
-        for a in capture_zones_raw
+        read_capture_zone(pm, alloc, paths, a, _uobject_name(pm, a, alloc) or "",
+                          comp_key)
+        for a, comp_key in capture_zones_raw
     ]
     # Preserve the old ordering: by name so '01-…' through '05-…' come out
     # in their natural visual order on the live map.
@@ -4257,6 +4395,8 @@ def build_snapshot(pm: ProcessMemory, arr: GUObjectArray,
     if game_state and not include_motd:
         game_state.pop("motd", None)
 
+    markers, projectiles = drop_phantom_entities(
+        markers, projectiles, deployables, vehicle_spawners, rally_points)
     _snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "server": server_id,

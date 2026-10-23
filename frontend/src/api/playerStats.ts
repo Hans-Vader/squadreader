@@ -1,15 +1,11 @@
-// Thin fetch helpers for the persistent player-stats API
-// (/api/players, /api/players/<eos>, /api/leaderboard, /api/servers). Same-origin
-// relative URLs + no-store, mirroring api/recordings.ts.
-//
-// `server` scopes a query to one enrolled server; "" (the default) = GLOBAL. The
-// agent's own stats API has a single server and ignores the param, so passing it
-// unconditionally is harmless on both the agent and the central builds.
+// Thin fetch helpers for the agent's persistent player-stats API
+// (/api/players, /api/players/<eos>, /api/leaderboard). Same-origin relative
+// URLs + no-store, mirroring api/recordings.ts.
 
 import type {
   PlayerSummary, PlayerProfile, LeaderRow, StatsPeriod,
   WeaponMetaRow, MatchHeatmap, LayerHeatmap, HeatmapLayerOption,
-  MatchSummaryRow, MatchDetail, ServerOption,
+  MatchSummaryRow, MatchDetail,
 } from "../state/types";
 
 async function getJson<T>(url: string): Promise<T> {
@@ -18,54 +14,41 @@ async function getJson<T>(url: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-/** `&server=<id>` when scoped to a server, else "" (global). */
-const srv = (server?: string) =>
-  server ? `&server=${encodeURIComponent(server)}` : "";
-
-/** The enrolled servers for the scope picker (central only; empty elsewhere). */
-export async function fetchServers(): Promise<ServerOption[]> {
-  return getJson("./api/servers");
+export async function searchPlayers(q: string, limit = 30): Promise<PlayerSummary[]> {
+  return getJson(`./api/players?q=${encodeURIComponent(q)}&limit=${limit}`);
 }
 
-export async function searchPlayers(
-  q: string, limit = 30, server = "",
-): Promise<PlayerSummary[]> {
-  return getJson(`./api/players?q=${encodeURIComponent(q)}&limit=${limit}${srv(server)}`);
-}
-
-export async function fetchProfile(
-  eosId: string, server = "",
-): Promise<PlayerProfile> {
-  return getJson(`./api/players/${encodeURIComponent(eosId)}?x=1${srv(server)}`);
+export async function fetchProfile(eosId: string): Promise<PlayerProfile> {
+  return getJson(`./api/players/${encodeURIComponent(eosId)}`);
 }
 
 export async function fetchLeaderboard(
-  stat: string, limit = 50, period: StatsPeriod = "alltime", server = "",
+  stat: string, limit = 50, period: StatsPeriod = "alltime",
 ): Promise<LeaderRow[]> {
   return getJson(
     `./api/leaderboard?stat=${encodeURIComponent(stat)}` +
-    `&limit=${limit}&period=${period}${srv(server)}`);
+    `&limit=${limit}&period=${period}`);
 }
 
 export async function fetchWeaponMeta(
-  period: StatsPeriod = "alltime", limit = 40, server = "",
+  period: StatsPeriod = "alltime", limit = 40,
 ): Promise<WeaponMetaRow[]> {
-  return getJson(`./api/weapons?period=${period}&limit=${limit}${srv(server)}`);
+  return getJson(`./api/weapons?period=${period}&limit=${limit}`);
 }
 
 export async function fetchMatchHeatmap(matchId: string): Promise<MatchHeatmap> {
   return getJson(`./api/heatmap?match=${encodeURIComponent(matchId)}`);
 }
 
-/** Only layers that have at least one positioned kill — the rest cannot be drawn. */
-export async function fetchHeatmapLayers(server = ""): Promise<HeatmapLayerOption[]> {
-  return getJson(`./api/layers?x=1${srv(server)}`);
+/** Only layers that have something to draw: a positioned kill. */
+export async function fetchHeatmapLayers(): Promise<HeatmapLayerOption[]> {
+  return getJson("./api/layers");
 }
 
 export async function fetchMatches(
-  period: StatsPeriod = "alltime", limit = 50, server = "",
+  period: StatsPeriod = "alltime", limit = 50,
 ): Promise<MatchSummaryRow[]> {
-  return getJson(`./api/matches?period=${period}&limit=${limit}${srv(server)}`);
+  return getJson(`./api/matches?period=${period}&limit=${limit}`);
 }
 
 export async function fetchMatchDetail(matchId: string): Promise<MatchDetail> {
@@ -73,9 +56,9 @@ export async function fetchMatchDetail(matchId: string): Promise<MatchDetail> {
 }
 
 export async function fetchLayerHeatmap(
-  layer: string, period: StatsPeriod = "alltime", cellCm = 5000, server = "",
+  layer: string, period: StatsPeriod = "alltime", cellCm = 5000,
 ): Promise<LayerHeatmap> {
   return getJson(
     `./api/heatmap?layer=${encodeURIComponent(layer)}` +
-    `&period=${period}&cell=${cellCm}${srv(server)}`);
+    `&period=${period}&cell=${cellCm}`);
 }

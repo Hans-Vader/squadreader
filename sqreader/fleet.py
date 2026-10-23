@@ -25,6 +25,13 @@ SCHEMA_CHECKIN = "sqr-checkin-1"
 # of a Squad patch, rare enough to be free. Covers IDLE servers too — a box that
 # never finishes a match still reports its health on this timer.
 CHECKIN_INTERVAL_SEC = 300.0
+# Live-match cadence. The FULL check-in walks class layouts (`run_doctor`) and
+# hashes the Squad build, so it stays on the 5-minute timer; the live block is
+# free — it is read straight off the snapshot this tick already built — and a
+# match list that claims "playing now" is only honest if it is minutes fresh.
+# Every LIVE_INTERVAL_SEC we send a LIGHT check-in (no health), and every fifth
+# one is the full one, so the doctor's cost per hour does not change.
+LIVE_INTERVAL_SEC = 60.0
 
 
 def bump_restarts(state_dir: str | Path) -> int:
@@ -42,6 +49,50 @@ def bump_restarts(state_dir: str | Path) -> int:
     except OSError:
         pass
     return n
+
+
+def live_match(snap: dict[str, Any] | None, *,
+               recording: bool = False) -> dict[str, Any] | None:
+    """The in-progress match as central should show it, or None when nothing is
+    being played right now.
+
+    Read straight off the snapshot the reader already built this tick, so it
+    costs nothing beyond the dict walk — that is what lets the live block ride a
+    1-minute timer while the doctor stays on 5. Deliberately conservative: only
+    a genuine `InProgress` with a real match id counts, because central renders
+    this as "playing now" and a stale/torn read there is worse than no row.
+    """
+    gs = (snap or {}).get("gameState") or {}
+    match_id = gs.get("matchId")
+    if not isinstance(match_id, str) or not match_id:
+        return None
+    if gs.get("matchState") != "InProgress":
+        return None
+    by_id = {t.get("id"): t for t in ((snap or {}).get("teams") or [])
+             if isinstance(t, dict)}
+    t1 = by_id.get(1) or {}
+    t2 = by_id.get(2) or {}
+    players = (snap or {}).get("players")
+    elapsed = gs.get("elapsedSec")
+    return {
+        "match_id": match_id,
+        # gameState carries ONE name and it is already the layer ("Fallujah AAS
+        # v1"), so both fields are fed from it — central's match rows have the
+        # same value in map_name and layer_name for exactly this reason.
+        "map_name": gs.get("mapName"),
+        "layer_name": gs.get("mapName"),
+        "game_mode": gs.get("gameModeName") or gs.get("gameModeId"),
+        "elapsed_sec": int(elapsed) if isinstance(elapsed, (int, float)) else None,
+        "players": len(players) if isinstance(players, list) else None,
+        "max_players": gs.get("maxPlayers"),
+        "team1_faction": t1.get("factionId"),
+        "team2_faction": t2.get("factionId"),
+        "team1_tickets": t1.get("tickets"),
+        "team2_tickets": t2.get("tickets"),
+        # Whether a .sqrx is open for this match — so the UI can promise a
+        # replay afterwards only when one is actually being written.
+        "recording": bool(recording),
+    }
 
 
 def gather_offline(*, reason: str, build_sha: str | None, restarts: int,
@@ -74,23 +125,33 @@ def gather_offline(*, reason: str, build_sha: str | None, restarts: int,
 
 
 def gather(pm: Any, arr: Any, alloc: Any, *, build_sha: str | None,
-           restarts: int, uptime_sec: float, channel: str) -> dict[str, Any]:
+           restarts: int, uptime_sec: float, channel: str,
+           live: dict[str, Any] | None = None,
+           with_health: bool = True) -> dict[str, Any]:
     """Assemble the check-in telemetry over the reader's own open handles.
 
     `health.run_doctor` walks the live class layouts (cheap) and classifies the
     reader as ok / drift / unknown; a `drift` server is one a Squad patch broke.
     The drift list is capped so a totally-broken reader can't send a huge body.
+
+    `with_health=False` is the LIGHT check-in that carries only the live block.
+    It omits the health keys entirely rather than sending them as null, because
+    central's `report_state` writes only the fields that are present — so a
+    light report can never clobber the last full one.
     """
-    doc = health.run_doctor(pm, arr, alloc)
-    return {
+    out: dict[str, Any] = {
         "schema": SCHEMA_CHECKIN,
         "agent_version": __version__,
         "platform": platform.system(),
-        "squad_build": build_sha,
-        "engine": squad_build.engine_version(pm, arr, alloc),
-        "health": doc.get("state", "unknown"),      # ok | drift | unknown
-        "drift": (doc.get("drift") or [])[:20],
         "restarts": int(restarts),
         "uptime_sec": int(uptime_sec),
         "channel": channel,
+        "live": live,
     }
+    if with_health:
+        doc = health.run_doctor(pm, arr, alloc)
+        out["squad_build"] = build_sha
+        out["engine"] = squad_build.engine_version(pm, arr, alloc)
+        out["health"] = doc.get("state", "unknown")     # ok | drift | unknown
+        out["drift"] = (doc.get("drift") or [])[:20]
+    return out

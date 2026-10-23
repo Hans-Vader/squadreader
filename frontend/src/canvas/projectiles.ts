@@ -22,6 +22,7 @@
 //      this tick → assume it impacted at its last known location.
 //      Skipped when (A) already fired for the same signature.
 
+import { saveState, restoreState } from "./canvasState";
 import type { Projectile, Snapshot, ViewState } from "../state/types";
 import { icon } from "./icons";
 import { worldToScreen } from "./worldToScreen";
@@ -154,14 +155,14 @@ export function drawProjectilesAndImpacts(
       const isRocket = kind === "grad" || kind === "s5";
       const w = (isRocket ? 14 : 12) * cs.dpr;
       const h = (isRocket ? 30 : 26) * cs.dpr;
-      ctx.save();
+      saveState(ctx);
       ctx.globalAlpha = 0.9;
       ctx.translate(sx, sy);
       // Icon's native nose points -Y; rotate by heading + π/2 so the
       // tip aims along the travel direction in screen space.
       if (heading != null) ctx.rotate(heading + Math.PI / 2);
       ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      ctx.restore();
+      restoreState(ctx);
     } else {
       // Fallback dot while the SVG warms up.
       ctx.beginPath();
@@ -215,7 +216,7 @@ function drawImpacts(
     // Fast fade-in (0..0.2) → slow fade-out (0.2..1).
     const fade = t < 0.2 ? (t / 0.2) : (1 - (t - 0.2) / 0.8);
 
-    ctx.save();
+    saveState(ctx);
     ctx.globalAlpha = fade * 0.85;
     ctx.strokeStyle = "#ff2418";
     ctx.lineWidth = 2.5 * cs.dpr;
@@ -229,6 +230,6 @@ function drawImpacts(
       ctx.arc(sx, sy, 3 * cs.dpr, 0, 2 * Math.PI);
       ctx.fill();
     }
-    ctx.restore();
+    restoreState(ctx);
   }
 }

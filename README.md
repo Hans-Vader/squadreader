@@ -1,9 +1,21 @@
 # sqreader
 
-Read a running Squad dedicated server's process memory to produce game
-snapshots — players, vehicles, capture zones, deployables, projectiles — then
-record whole matches for replay and compute per-player stats and ELO. It is
-**read-only**: it never writes to the game.
+sqreader reads a running Squad dedicated server's memory and records every
+match: players, vehicles, capture zones, deployables, markers and projectiles,
+plus the kill feed from the server log. From those recordings it builds
+replays you watch in the browser and per-player stats with ELO. It is
+**read-only**: it never writes to the game and never sends it a command.
+
+The replays on [squadreader.com/replays](https://squadreader.com/replays) are
+recorded by this agent and played back by the viewer in `frontend/`.
+
+There are two ways to run it:
+
+- **[Connect your server to squadreader.com](#connect-your-server-to-squadreadercom)**:
+  one command on the game server. Finished matches are published to the site,
+  and the agent keeps itself up to date.
+- **[Run it yourself](#run-it-yourself)**: from source or in Docker, with the
+  replay viewer and stats served from your own machine. Nothing leaves it.
 
 ## About this fork
 
@@ -11,6 +23,14 @@ This is a fork of
 [cagrianilokumus/squadreader](https://github.com/cagrianilokumus/squadreader).
 It follows upstream and adds:
 
+- **A live map for moderators.** Upstream ships no live view, because a map of
+  both teams in real time lets players ghost. Here it is back behind a shared
+  password, for moderators only. The running round plays like a live stream in
+  the replay player: the timeline reaches back to the start of the round, a
+  LIVE button returns to the newest frame, and the next round opens by itself.
+  Logins are throttled, SIGHUP ends every session, and the password can be a
+  scrypt hash in the environment. Without a password the server is the public
+  build, byte for byte. See [docs/live-map.md](docs/live-map.md).
 - **Minimaps for modded and Steam Workshop maps.** Upstream's map table only
   knows the stock layers, so a workshop map plays back over a bare grid. Here an
   entry in `data/static/custom_maps.json` and an image in `sqmaps/` fill that
@@ -34,58 +54,146 @@ It follows upstream and adds:
   [CONTRIBUTING.md](CONTRIBUTING.md) rebuilds the web UI in a throwaway
   container on a box without Node.
 
-## Example output
+## Connect your server to squadreader.com
 
-`sqreader snapshot --pretty` prints one JSON snapshot of the live match:
+1. Open [squadreader.com/setup](https://squadreader.com/setup), sign in with
+   Discord and give your server a short name. The name becomes the server's
+   address, `squadreader.com/s/<name>`, and the page then shows your install
+   line with your token in it. Nobody has to approve a server.
+2. On the Linux machine that runs Squad, as root:
 
-```json
-{
-  "timestamp": "2026-07-15T18:31:24.082Z",
-  "server": "squad",
-  "gameState": { "mapName": "Narva RAAS v1", "matchState": "InProgress", "elapsedSec": 842 },
-  "teams": [ { "id": 1, "factionId": "USA", "tickets": 640 } ],
-  "players": [ { "name": "…", "teamId": 1, "soldier": { "position": { "x": 0, "y": 0 }, "health": 100 } } ],
-  "captureZones": [ { "name": "Warehouse", "owningTeam": 1, "capturePercent": 1.0 } ],
-  "vehicles": [ { "classShort": "BP_M1A2", "team": 1 } ]
-}
+   ```bash
+   curl -fsSL https://squadreader.com/install.sh | sudo bash -s -- <TOKEN>
+   ```
+
+The next match your server finishes appears on its page,
+`squadreader.com/s/<name>`, with its replays and the all-time stats of everyone
+who played on it. A new server stays out of the site-wide lists and
+leaderboards until an admin lists it. You can also make its page private, so
+that only you and the people you add can see it. One Discord account can
+register up to three servers.
+
+### What the installer does
+
+The installer is [`packaging/install.sh`](packaging/install.sh). The site serves
+the same file byte for byte, so you can read it before you pipe it into a root
+shell. It:
+
+1. checks that the machine is Linux, has systemd, `curl` and `sha256sum`, and
+   that it runs as root;
+2. finds the running Squad server. If several are running it stops and prints
+   the command for each instead of picking one (see below). If none is running
+   it installs anyway, and the service attaches once the game is up;
+3. downloads the agent binary listed in the release's `SHA256SUMS`, together
+   with the viewer and map assets, and refuses to install if a checksum does not
+   match;
+4. runs `sqreader version` and `sqreader selftest`, and stops if either fails;
+5. installs into `/opt/sqreader` and links `/usr/local/bin/sqreader`;
+6. writes the systemd service `sqreader-prod` and a daily `sqreader-retention`
+   timer that keeps recordings from filling the disk (90 days, 150 GB, at least
+   50 GB free, newest 3 always kept);
+7. enrols the machine with your token and starts the service.
+
+The token is used once and expires after a week. Running the installer again is
+safe: recordings, stats, the enrolment and `sqreader.config.json` are kept.
+
+### Check that it is running
+
+```bash
+systemctl status sqreader-prod          # should say active (running)
+journalctl -u sqreader-prod -n 50       # its log
+cd /opt/sqreader && sudo ./sqreader enroll --status
 ```
 
-`sqreader serve` records matches and serves the replay player + stats dashboard
-in the browser: a map with every player, vehicle, marker and capture zone
-moving in real time, a scrubbable timeline, a kill feed and a scoreboard.
+The agent serves its local API and viewer on `127.0.0.1:8081`, which is not
+reachable from outside the machine.
 
-You can watch one without installing anything — the replays at
-[squadreader.com/replays](https://squadreader.com/replays) are produced by this
-agent and played back by the viewer in `frontend/`.
+### Several Squad servers on one machine
 
-## Requirements
+Name each server on the setup page, so each one gets its own token. Then run the
+installer without a token. It lists the Squad servers it finds and prints the
+exact command for each:
 
-- **Linux** — the reader depends on `/proc/<pid>/mem`; it does not run on Windows or macOS.
+```bash
+curl -fsSL https://squadreader.com/install.sh -o install.sh && sudo bash install.sh
+```
+
+Each command gives the instance its own name, local port and the game port
+(`-Port=`) of the server it reads:
+
+```bash
+sudo SQREADER_INSTANCE=eu2 SQREADER_PORT=8082 SQREADER_SQUAD_PORT=7797 \
+  bash install.sh <TOKEN>
+```
+
+Everything an instance owns is named after it: `/opt/sqreader-eu2`, the
+`sqreader-eu2` service and its retention timer. A second install adds a server
+and leaves the first one alone.
+
+### Matches from before you connected
+
+Their stats can be published once, from the recordings already on disk:
+
+```bash
+cd /opt/sqreader && sudo ./sqreader stats-backfill \
+  --recordings-dir /opt/sqreader/recordings \
+  --stats-db /opt/sqreader/stats/player_stats.db --push
+```
+
+### Updates
+
+From 1.3.2 on, the agent installs signed releases on its own. It downloads the
+release, waits until no match is in progress, and restarts into it, keeping the
+previous binary in case the new one does not start. After a Squad update it
+re-derives the game's memory offsets from the running binary at startup
+(1.4.5 and later).
+
+To upgrade by hand, run the installer again. An enrolled machine needs no
+token, because the download is signed with the agent's own credentials:
+
+```bash
+curl -fsSL https://squadreader.com/install.sh | sudo bash
+```
+
+### What leaves your machine
+
+Only finished matches: the final stats and the `.sqrx` replay, once a round is
+over. Nothing live is sent. Both are sealed with a key that stays on your
+server. [`PRIVACY.md`](PRIVACY.md) lists exactly what is sent.
+
+### Stop it or hide it
+
+`sudo systemctl stop sqreader-prod` stops it, and `systemctl disable` keeps it
+from starting at boot. To keep publishing but hide the server, sign in on the
+setup page and tick **Keep private** under your server. A server that has not
+published any match yet can be removed from the same page.
+
+## Run it yourself
+
+sqreader also runs on its own, with no central site. `sqreader serve` records
+matches and serves the replay viewer and stats dashboard from your machine: a
+map with every player, vehicle, marker and capture zone moving in real time, a
+scrubbable timeline, a kill feed and a scoreboard. Nothing is sent anywhere
+unless you run `sqreader enroll`.
+
+### Requirements
+
+- **Linux.** The reader depends on `/proc/<pid>/mem`; it does not run on Windows
+  or macOS.
 - **Python ≥ 3.10.**
-- Permission to read the game process's memory: run as **root**, or grant the Python process `CAP_SYS_PTRACE` (and `CAP_DAC_READ_SEARCH`).
-- A running **Squad dedicated server** on the same host. Offsets are reverse-engineered for Squad **v10.4 / SDK v10.4.1**.
-- Node ≥ 18 **only** if you want to rebuild the web UI — a prebuilt `frontend/dist` is committed, so normal use needs no Node.
+- Permission to read the game process's memory: run as **root**, or grant the
+  Python process `CAP_SYS_PTRACE` and `CAP_DAC_READ_SEARCH`.
+- A running **Squad dedicated server** on the same host.
+- Node ≥ 18 **only** to rebuild the web UI. A prebuilt `frontend/dist` is
+  committed, so normal use needs no Node. Without Node, build it in a
+  container instead (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
-## How a match is recorded
-
-Two tiers, so the replay is smooth without the reader stealing the box:
-
-- a **full snapshot** about once a second — every player, vehicle, deployable,
-  marker, capture zone and projectile;
-- **position-only frames at 4 Hz** in between, re-reading just where everything
-  is, so movement plays back fluidly.
-
-Both go into one `.sqrx` per match (zstd-compressed NDJSON, ~6-10x smaller than
-raw). A recording is written once and never edited, and nothing is ever
-interpolated: an entity that fails a freshness check is left out of that frame
-rather than guessed at.
-
-## Install
+### From source
 
 ```bash
 git clone https://github.com/cagrianilokumus/squadreader.git
 cd squadreader
-pip install -e .
+pip install -e .            # add [push] for central push, [fast] for numpy
 
 # one-line summary of the current match (quickest sanity check)
 sudo sqreader summary
@@ -94,10 +202,10 @@ sudo sqreader summary
 sudo sqreader serve
 ```
 
-On a standard single-instance box **no configuration is needed** — the Squad
-server is auto-detected by its process name.
+On a standard single-instance box **no configuration is needed**: the Squad
+server is found by its process name.
 
-## Run in Docker
+### In Docker
 
 The reader can run in its own container beside a Squad server you already run,
 reading the game's memory across the container boundary. It needs two
@@ -118,7 +226,7 @@ nor its install directory exists inside this stack, so neither can carry a
 default that could be right — running without them names exactly what is
 missing.
 
-### Two modes
+#### Two modes
 
 | Your setup | `SQUAD_PID_MODE` | `SQUAD_APPARMOR` |
 |---|---|---|
@@ -150,7 +258,7 @@ own code does, not the authority the container holds. Choose host mode only on a
 host you already trust at root level; container mode stays bounded to the peer
 container, since `docker-default`'s ptrace confinement still applies there.
 
-### Why the reader is privileged
+#### Why the reader is privileged
 
 `cap_drop: [ALL]` plus exactly two capabilities:
 
@@ -167,7 +275,7 @@ sibling of the game process rather than an ancestor, and `ptrace_scope=1` grants
 attach to ancestors only — the same capability, plus a forked image and two
 lifecycles behind one PID 1.
 
-### What is mounted
+#### What is mounted
 
 | Mount | Why |
 |---|---|
@@ -183,7 +291,30 @@ container, `/home/<user>/serverfiles` for LinuxGSM).
 The replay UI is published to `127.0.0.1:8080` by default. Put it behind a
 reverse proxy rather than setting `SQREADER_BIND=0.0.0.0` on a public box.
 
-### Reverse proxy and TLS
+#### Local overrides
+
+Compose merges `docker-compose.override.yml` into `docker-compose.yml`
+automatically, so per-host changes go there instead of into the tracked file.
+The file is gitignored and nothing in this repo creates it; what goes in it is
+up to you.
+
+For example (just one possible use), to keep recordings and the stats DB as
+plain files next to the checkout instead of in the `sqreader-data` named
+volume:
+
+```yaml
+# docker-compose.override.yml (example)
+services:
+  sqreader:
+    volumes:
+      - ./sqreader-data:/data
+```
+
+`sqreader-data/` is gitignored for that case. If you set `COMPOSE_FILE` in
+`.env` (see below), the override is no longer picked up on its own; add it to
+that list.
+
+#### Reverse proxy and TLS
 
 Optional, and off unless you ask for it. `docker-compose.proxy.yml` adds a
 Caddy container in front of the replay UI that obtains and renews a Let's
@@ -240,7 +371,7 @@ restart order a fresh certificate, which walks straight into Let's Encrypt's
 per-domain weekly limit; while a domain is still being set up, uncomment the
 staging-CA block at the top of [`deploy/Caddyfile`](deploy/Caddyfile) instead.
 
-### Recording retention
+#### Recording retention
 
 Recordings grow by hundreds of MB a day and nothing else deletes them; on a box
 that also runs the game, a full disk takes Squad down too. The container runs a
@@ -257,7 +388,7 @@ timer in `deploy/`:
 
 The match being recorded right now is never touched.
 
-### Troubleshooting
+#### Troubleshooting
 
 **`required variable SQUAD_PID_MODE is missing a value`** — copy
 `.env.example` to `.env` and uncomment one mode block, as the message says.
@@ -293,7 +424,7 @@ is expected until the game starts; a `PermissionError` in
 that parenthesis is a capability/AppArmor misconfiguration, not a boot delay
 — see the entry above.
 
-### Plugins and optional config
+#### Plugins and optional config
 
 Plugins (anti-cheat) and the alert webhook are driven by a
 `sqreader.config.json`. Create one from `sqreader.config.example.json` and
@@ -301,14 +432,14 @@ uncomment the matching volume line in `docker-compose.yml` — the reader's
 working directory is `/app`, so a file mounted at `/app/sqreader.config.json`
 is found without setting anything else.
 
-### Not included
+#### Not included
 
 The image is built from source, so remote self-update is inert — upgrade by
 pulling the repo and running `docker compose build && docker compose up -d`
 (`build` alone leaves the old container running). Central push stays off;
 it needs `sqreader enroll` and the `push` extra (`pip install .[push]`).
 
-### Testing this setup
+#### Testing this setup
 
 The tests for the entrypoint and the compose files live in `docker/tests/`,
 outside the normal suite: they shell out to a real daemon, so a plain
@@ -317,6 +448,36 @@ outside the normal suite: they shell out to a real daemon, so a plain
 
 ```bash
 python -m pytest docker/tests
+```
+
+## How a match is recorded
+
+Two tiers, so the replay is smooth without the reader stealing the box:
+
+- a **full snapshot** about once a second — every player, vehicle, deployable,
+  marker, capture zone and projectile;
+- **position-only frames at 4 Hz** in between, re-reading just where everything
+  is, so movement plays back fluidly.
+
+Both go into one `.sqrx` per match (zstd-compressed NDJSON, ~6-10x smaller than
+raw). A recording is written once and never edited, and nothing is ever
+interpolated: an entity that fails a freshness check is left out of that frame
+rather than guessed at.
+
+## Example output
+
+`sqreader snapshot --pretty` prints one JSON snapshot of the live match:
+
+```json
+{
+  "timestamp": "2026-07-15T18:31:24.082Z",
+  "server": "squad",
+  "gameState": { "mapName": "Narva RAAS v1", "matchState": "InProgress", "elapsedSec": 842 },
+  "teams": [ { "id": 1, "factionId": "USA", "tickets": 640 } ],
+  "players": [ { "name": "…", "teamId": 1, "soldier": { "position": { "x": 0, "y": 0 }, "health": 100 } } ],
+  "captureZones": [ { "name": "Warehouse", "owningTeam": 1, "capturePercent": 1.0 } ],
+  "vehicles": [ { "classShort": "BP_M1A2", "team": 1 } ]
+}
 ```
 
 ## Configuration
@@ -358,12 +519,13 @@ To give a modded map its minimap, add it to `data/static/custom_maps.json`
 Then drop the minimap image next to the stock ones as
 `sqmaps/HrodnaBorder.webp` (`.png`, `.jpg` also work).
 
-- **The key is the MAP name, not the layer name** — one entry covers every
-  RAAS/AAS/Invasion/Seed layer of that mod. Matching ignores case, spaces and
-  underscores and tolerates a community tag in front, so `Hrodna Border` finds
-  both `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more
-  specific key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys
-  under three characters are ignored so a typo cannot swallow unrelated maps.
+- **The key is normally the MAP name, not the layer name** — one entry covers
+  every RAAS/AAS/Invasion/Seed layer of that mod (a single layer can still
+  claim its own entry, see below). Matching ignores case, spaces and underscores
+  and tolerates a community tag in front, so `Hrodna Border` finds both
+  `Hrodna_Border_RAAS_v1` and `SEC 26 Hrodna Border RAAS v1`. A more specific
+  key wins (`Hrodna Border Night` beats `Hrodna Border`), and keys under three
+  characters are ignored so a typo cannot swallow unrelated maps.
 - **`texture` is the filename without extension** and must match
   `[A-Za-z0-9_-]+` — no spaces.
 - **`topLeft`/`bottomRight` are the minimap's world corners in centimetres.**
@@ -371,20 +533,81 @@ Then drop the minimap image next to the stock ones as
   values; failing that, a centred square of the advertised map size is a good
   first guess (4 km → `±200000`), then check a replay and adjust.
 
+A **layer** name as the key also works and beats the map key. That is for Seed
+and Skirmish layers: Squad plays those on a cropped minimap, so their extent is
+a small box inside the map. Only write one if you have that cropped image — and
+set `mapName`/`mapId` as well, or the layer is filed under its own name instead
+of under its map in recordings and stats. Without an entry the layer falls back
+to the map key and draws on the full minimap: correct, just zoomed out.
+
+What a layer entry must never do is carry the cropped corners from a layer dump
+while pointing at the full-map texture. The image is stretched across whatever
+bounds the entry gives it, so the whole map ends up squeezed into the small box.
+
 An entry that is missing its corners, or whose `texture` the server would
 refuse, is dropped with a warning at startup rather than used — a half-written
 entry hides the map the viewer would otherwise have guessed. Changes are read at
-startup, so restart the reader. In Docker both files are baked into the image
+startup, so restart the reader. In Docker these files are baked into the image
 (`COPY . /app`) — rebuild after adding a map.
+
+#### Cap zones on a modded RAAS layer
+
+The flag shapes come from `data/static/capzones.json`, which
+`scripts/fetch_capzones.py` regenerates from the stock layer list — a modded
+layer is never in it, and an entry pasted in there is gone after the next run.
+Put them in `data/static/custom_capzones.json` instead (also optional, also
+hand-written), keyed by **layer** name, same shape as the generated file:
+
+```json
+{
+  "Hrodna Border RAAS v2": [
+    {
+      "name": "Kowale Hill",
+      "cluster": "A1",
+      "position": { "x": -92905.4, "y": -148918.5 },
+      "geometry": [{ "type": "sphere", "dx": 0, "dy": 0, "radius": 7610.2 }]
+    }
+  ]
+}
+```
+
+This one is keyed per layer, not per map: RAAS v1 and v2 are different flag
+sets, so each layer needs its own entry. Case, spaces and underscores are
+ignored, but unlike the map keys above the key is the WHOLE layer name — a tag
+in front of it is not tolerated. Take that name from `gameState.mapName` in a
+recording, not from a layer dump: SquadCalc prefixes a modded layer with its mod
+tag (`SU Hrodna Border RAAS v2`) and the game reports it without
+(`Hrodna Border RAAS v2`). An entry wins over the generated table. If you have
+the mod's layer dump in SquadCalc's `/api/get/layer` shape, `extract_capzone_data`
+in `sqreader/squad/capzones.py` turns it into exactly this list.
 
 Known gaps:
 
-- **RAAS capture zones stay unrendered on modded maps.** Their static geometry
-  comes from SquadCalc, which does not carry workshop layers. AAS layers are
+- **Cap-zone geometry has no upstream source for modded layers.** SquadCalc,
+  which feeds the generated table, does not carry workshop layers, so RAAS
+  flags stay unrendered until someone writes the file above. AAS layers are
   unaffected — there the live capture zones carry their own positions.
-- **Overriding a stock layer** (by naming it exactly) replaces its extent but
-  not its capture-zone geometry, which stays in the stock layer's coordinates.
-  Expect the flags to sit wrong unless the new bounds match the old ones.
+- **Overriding a stock layer** (by naming it exactly) replaces its extent, but
+  its cap zones keep the stock layer's coordinates unless you override those in
+  `custom_capzones.json` as well. Expect the flags to sit wrong otherwise.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `sqreader summary` | one line about the current match; the quickest check that the reader can see the game |
+| `sqreader snapshot --pretty` | one full JSON snapshot of the live match |
+| `sqreader watch` | snapshots in a loop, to the terminal or a `captures/*.ndjson` file |
+| `sqreader serve` | record matches and serve the replay viewer and stats (`--push` also publishes finished matches) |
+| `sqreader doctor` | resolve every memory offset against the running binary and report any that moved |
+| `sqreader enroll <TOKEN>` | register this machine with a central site; `--status` shows the enrolment and push queue |
+| `sqreader stats-backfill` | rebuild the stats database from recordings on disk; `--push` publishes them |
+| `sqreader stats-elo-recalc` | recompute every ELO rating from scratch, oldest match first |
+| `sqreader retention` | prune old recordings by age, total size and free disk space |
+| `sqreader selftest` | check that crypto, compression and the bundled data work on this machine |
+| `sqreader version` | print the build version |
+
+Every command takes `--help`.
 
 ## What data it collects and where it writes
 
@@ -407,9 +630,16 @@ See [PRIVACY.md](PRIVACY.md) for what is stored, how long, and how to delete it.
 ## Known limitations
 
 - **Linux only** (depends on `/proc/<pid>/mem`).
-- **Squad-version-specific.** Memory offsets are reverse-engineered for Squad v10.4 / SDK v10.4.1. A Squad update can move them — `sqreader doctor` re-verifies every offset against the live binary and reports drift, and startup discovery self-heals the two anchor addresses; a larger layout change needs new offsets.
-- **Anti-cheat detectors have blind spots.** They flag only memory-verified signals (no guessing), so many cheat classes are simply not detectable this way.
-- **One game server per reader instance.**
+- **Squad-version-specific.** The offsets were reverse-engineered on Squad
+  v10.4.1 ([`docs/offsets.md`](docs/offsets.md)). Since 1.4.5 the reader
+  re-derives them from the running binary at startup, which carried it through
+  the layout change in v10.5.3, and `sqreader doctor` reports any it could not
+  place. A larger change to the game can still need new offsets.
+- **Anti-cheat detectors have blind spots.** They flag only memory-verified
+  signals (no guessing), so many cheat classes are simply not detectable this
+  way.
+- **One game server per reader instance.** Run one instance per server; the
+  installer sets that up for you.
 - **Modded maps need a hand-written entry.** Bounds and minimap for a workshop map cannot be derived from the game; see [Modded / Steam Workshop maps](#modded--steam-workshop-maps).
 
 ## Legal
@@ -419,21 +649,6 @@ in accordance with Squad's Terms of Service and EULA. The game art under
 `icons/`, `sqmaps/`, and the static data under `data/static/` are the property
 of Offworld Industries and their respective sources, bundled for interoperability
 only — see [NOTICE](NOTICE).
-
-## Upgrading
-
-Re-run the installer. It is safe to run again: recordings, stats and an existing
-enrolment are left alone, and your `sqreader.config.json` is not overwritten.
-
-```
-curl -fsSL https://squadreader.com/install.sh | bash
-```
-
-A box that is already enrolled needs no token — the installer signs the download
-with the agent's own credentials. From 1.3.2 onward the installed unit can apply
-a signed release on its own: the agent stages it, waits for a moment when no
-match is in progress, and restarts into it, keeping the previous binary beside
-it in case the new one will not start.
 
 ## Contributing & License
 

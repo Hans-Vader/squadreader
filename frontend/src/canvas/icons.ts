@@ -2,6 +2,7 @@
 // visual-weight normalisation. Ported from the old viewer; no React.
 
 import type { Deployable, Marker, Vehicle } from "../state/types";
+import { saveState, restoreState } from "./canvasState";
 
 interface CachedImage extends HTMLImageElement {
   _bbox?: { x: number; y: number; w: number; h: number } | null;
@@ -69,7 +70,7 @@ export function drawIcon(
 ): boolean {
   if (!img.complete || img.naturalWidth === 0) return false;
   const bbox = iconBbox(img);
-  ctx.save();
+  saveState(ctx);
   ctx.translate(x, y);
   if (opts.rotate) ctx.rotate(opts.rotate);
   if (opts.tint) {
@@ -88,7 +89,7 @@ export function drawIcon(
   } else {
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
   }
-  ctx.restore();
+  restoreState(ctx);
   return true;
 }
 
@@ -108,11 +109,11 @@ export function drawIconCentered(
 ): boolean {
   if (!img.complete || img.naturalWidth === 0) return false;
   const dw = img.naturalWidth * ppu, dh = img.naturalHeight * ppu;
-  ctx.save();
+  saveState(ctx);
   ctx.translate(x, y);
   if (rotate) ctx.rotate(rotate);
   ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-  ctx.restore();
+  restoreState(ctx);
   return true;
 }
 
